@@ -48,13 +48,15 @@ pip install -r requirements.txt
         "host": "http://127.0.0.1:8091",
         "user": "Administrator",
         "pass": "password",
-        "customName": "Local Development"
+        "customName": "Local Development",
+        "watch":true
     },
     {
         "host": "http://production.example.com:8091",
         "user": "Administrator",
         "pass": "secure_password",
-        "customName": "Production Cluster"
+        "customName": "Production Cluster",
+        "watch":false
     }
 ]
 ```
