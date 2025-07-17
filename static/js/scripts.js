@@ -37,7 +37,7 @@ $(document).ready(function() {
                     <div class="card-header drag-handle">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <h4 class="mb-1 cluster-name">${cluster.clusterName}</h4>
+                                <h4 class="mb-1 cluster-name">${cluster.clusterName}${cluster.customName ? ` (${cluster.customName})` : ''}</h4>
                                 <small class="text-muted cluster-host">${cluster.host}</small>
                             </div>
                             <div class="text-right">
@@ -90,19 +90,21 @@ $(document).ready(function() {
                                 <div id="tabs-buckets-${index}">
                                     <div class="table-responsive">
                                         <table class="table table-striped table-sm">
-                                            <thead>
-                                                <tr>
-                                                    <th>Name</th>
-                                                    <th>Type</th>
-                                                    <th>Storage</th>
-                                                    <th>vBuckets</th>
-                                                    <th>Replicas</th>
-                                                    <th>Items</th>
-                                                    <th>Disk (MB)</th>
-                                                    <th>Data (MB)</th>
-                                                    <th>Mem (MB)</th>
-                                                </tr>
-                                            </thead>
+                                        <thead>
+                                        <tr>
+                                        <th>Name</th>
+                                        <th>Type</th>
+                                        <th>Storage</th>
+                                        <th>Replicas</th>
+                                        <th>Items</th>
+                                        <th>Quota (MB)</th>
+                                        <th>Quota Used (%)</th>
+                                        <th>Ops/Sec</th>
+                                        <th>Disk Fetches</th>
+                                            <th>Eviction Policy</th>
+                                                <th>Durability</th>
+                                                 </tr>
+                                             </thead>
                                             <tbody class="buckets-table-body">
                                                 ${generateBucketsTable(cluster.buckets)}
                                             </tbody>
@@ -150,7 +152,7 @@ $(document).ready(function() {
             const clusterDiv = $(`.cluster[data-cluster-index="${index}"]`);
             if (clusterDiv.length) {
                 // Update header info
-                clusterDiv.find('.cluster-name').text(cluster.clusterName);
+                clusterDiv.find('.cluster-name').text(`${cluster.clusterName}${cluster.customName ? ` (${cluster.customName})` : ''}`);
                 clusterDiv.find('.cluster-host').text(cluster.host);
                 clusterDiv.find('.cluster-health-badge')
                     .removeClass('badge-success badge-danger')
@@ -196,20 +198,45 @@ $(document).ready(function() {
                 <td><strong>${bucket.name}</strong></td>
                 <td>${bucket.bucketType}</td>
                 <td>${bucket.storageBackend}</td>
-                <td>${bucket.numVBuckets}</td>
                 <td>${bucket.replicaNumber}</td>
                 <td>${bucket.basicStats.itemCount || 0}</td>
-                <td>${((bucket.basicStats.diskUsed || 0) / (1024 * 1024)).toFixed(2)}</td>
-                <td>${((bucket.basicStats.dataUsed || 0) / (1024 * 1024)).toFixed(2)}</td>
-                <td>${((bucket.basicStats.memUsed || 0) / (1024 * 1024)).toFixed(2)}</td>
+                <td>${((bucket.quota.ram || 0) / (1024 * 1024)).toFixed(2)}</td>
+                <td>${bucket.quotaPercentUsed ? bucket.quotaPercentUsed.toFixed(2) + '%' : '0%'}</td>
+                <td>${bucket.opsPerSec || 0}</td>
+                <td>${bucket.diskFetches || 0}</td>
+                <td>${bucket.evictionPolicy}</td>
+                <td>${bucket.durabilityMinLevel}</td>
             </tr>
         `).join('');
     }
 
     function generateSystemStats(systemStats) {
+        const formatValue = (key, value) => {
+            if (typeof value !== 'number') return value;
+            
+            // Memory-related stats (convert to MB or GB)
+            if (key.includes('mem') || key.includes('memory') || key.includes('swap')) {
+                if (value > 1024 * 1024 * 1024) {
+                    return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+                } else if (value > 1024 * 1024) {
+                    return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+                } else {
+                    return `${value.toFixed(2)} bytes`;
+                }
+            }
+            
+            // Percentage-related stats
+            if (key.includes('rate') || key.includes('ratio') || key.includes('percent') || key.includes('utilization')) {
+                return `${value.toFixed(2)}%`;
+            }
+            
+            // Default formatting for other numeric values
+            return value.toFixed(2);
+        };
+
         return Object.entries(systemStats).map(([key, value]) => `
             <div class="col-md-6 mb-2">
-                <strong>${key.replace(/_/g, ' ').toUpperCase()}:</strong> ${typeof value === 'number' ? value.toFixed(2) : value}
+                <strong>${key.replace(/_/g, ' ').toUpperCase()}:</strong> ${formatValue(key, value)}
             </div>
         `).join('');
     }
@@ -246,14 +273,6 @@ $(document).ready(function() {
                         </div>
                         <div class="col-md-6">
                             <canvas id="chart-ops-misses-${index}" width="400" height="200"></canvas>
-                        </div>
-                    </div>
-                    <div class="row mt-3">
-                        <div class="col-md-6">
-                            <canvas id="chart-bg-wait-${index}" width="400" height="200"></canvas>
-                        </div>
-                        <div class="col-md-6">
-                            <canvas id="chart-ops-rates-${index}" width="400" height="200"></canvas>
                         </div>
                     </div>
                 </div>
@@ -339,42 +358,90 @@ $(document).ready(function() {
         const samples = bucketStat.stats.op.samples;
         const timestamps = samples.timestamp || [];
         
-        // Convert timestamps to relative seconds (last 60 seconds)
-        const timeLabels = timestamps.map((ts, i) => `-${60 - i}s`);
+        // Convert timestamps to human-readable time format (HH:MM:SS)
+        const timeLabels = timestamps.map(ts => {
+            const date = new Date(ts); // Timestamps are already in milliseconds
+            return date.toLocaleTimeString('en-US', { 
+                hour12: false, 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+            });
+        });
 
         // Update bucket info
         $(`#bucket-title-${clusterIndex}`).text(`${bucketStat.name} Bucket Statistics`);
         $(`#bucket-details-${clusterIndex}`).text(`Type: ${bucketStat.bucketType || 'Unknown'} | vBuckets: ${bucketStat.numVBuckets || 'N/A'} | Replicas: ${bucketStat.replicaNumber || 'N/A'}`);
 
         // OPERATIONS GROUP
-        // Operations - Hits
+        // Calculate total ops if not available
+        const cmd_gets = samples.cmd_get || [];
+        const cmd_sets = samples.cmd_set || [];
+        const delete_hits = samples.delete_hits || [];
+        const cas_hits = samples.cas_hits || [];
+        const lookup_hits = samples.lookup_hits || [];
+        const incr_hits = samples.incr_hits || [];
+        const decr_hits = samples.decr_hits || [];
+        const total_ops = samples.ops || cmd_gets.map((_, i) => 
+            (cmd_gets[i] || 0) + (cmd_sets[i] || 0) + (delete_hits[i] || 0) + 
+            (cas_hits[i] || 0) + (lookup_hits[i] || 0) + (incr_hits[i] || 0) + (decr_hits[i] || 0)
+        );
+
+        // Operations - Hits/Operations
         createChart(`chart-ops-hits-${clusterIndex}`, {
             labels: timeLabels,
             datasets: [{
-                label: 'Get Hits',
-                data: samples.get_hits || [],
+                label: 'Cmd Gets',
+                data: cmd_gets,
                 borderColor: 'rgb(54, 162, 235)',
                 backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                tension: 0.1,
-                yAxisID: 'y'
+                tension: 0.1
             }, {
-                label: 'Cmd Get',
-                data: samples.cmd_get || [],
-                borderColor: 'rgb(75, 192, 192)',
-                backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                tension: 0.1,
-                yAxisID: 'y'
+                label: 'Cmd Sets',
+                data: cmd_sets,
+                borderColor: 'rgb(255, 193, 7)',
+                backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                tension: 0.1
             }, {
-                label: 'Cache Miss Rate (%)',
-                data: samples.ep_cache_miss_rate || [],
-                borderColor: 'rgb(255, 99, 132)',
-                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                label: 'Delete Hits',
+                data: delete_hits,
+                borderColor: 'rgb(244, 67, 54)',
+                backgroundColor: 'rgba(244, 67, 54, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'CAS Hits',
+                data: cas_hits,
+                borderColor: 'rgb(156, 39, 176)',
+                backgroundColor: 'rgba(156, 39, 176, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'Lookup Hits',
+                data: lookup_hits,
+                borderColor: 'rgb(76, 175, 80)',
+                backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'Increment Hits',
+                data: incr_hits,
+                borderColor: 'rgb(255, 152, 0)',
+                backgroundColor: 'rgba(255, 152, 0, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'Decrement Hits',
+                data: decr_hits,
+                borderColor: 'rgb(103, 58, 183)',
+                backgroundColor: 'rgba(103, 58, 183, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'Total Ops',
+                data: total_ops,
+                borderColor: 'rgb(33, 150, 243)',
+                backgroundColor: 'rgba(33, 150, 243, 0.2)',
                 tension: 0.1,
-                yAxisID: 'y1'
+                borderWidth: 3
             }]
-        }, 'Operations - Hits', {
-            y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Operations/sec' } },
-            y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Miss Rate %' }, grid: { drawOnChartArea: false } }
+        }, 'Operations - Hits/Commands', {
+            y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Operations/sec' } }
         });
 
         // Operations - Misses
@@ -393,61 +460,31 @@ $(document).ready(function() {
                 backgroundColor: 'rgba(255, 159, 64, 0.2)',
                 tension: 0.1
             }, {
-                label: 'Incr Misses',
-                data: samples.incr_misses || [],
-                borderColor: 'rgb(153, 102, 255)',
-                backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                label: 'CAS Misses',
+                data: samples.cas_misses || [],
+                borderColor: 'rgb(156, 39, 176)',
+                backgroundColor: 'rgba(156, 39, 176, 0.2)',
                 tension: 0.1
-            }]
-        }, 'Operations - Misses');
-
-        // Background Wait Operations
-        createChart(`chart-bg-wait-${clusterIndex}`, {
-            labels: timeLabels,
-            datasets: [{
-                label: 'Avg BG Wait Time (μs)',
-                data: samples.avg_bg_wait_time || [],
+            }, {
+                label: 'Lookup Misses',
+                data: samples.lookup_misses || [],
+                borderColor: 'rgb(76, 175, 80)',
+                backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'Increment Misses',
+                data: samples.incr_misses || [],
+                borderColor: 'rgb(255, 152, 0)',
+                backgroundColor: 'rgba(255, 152, 0, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'Decrement Misses',
+                data: samples.decr_misses || [],
                 borderColor: 'rgb(103, 58, 183)',
                 backgroundColor: 'rgba(103, 58, 183, 0.2)',
                 tension: 0.1
-            }, {
-                label: 'BG Fetched',
-                data: samples.bg_fetched || [],
-                borderColor: 'rgb(63, 81, 181)',
-                backgroundColor: 'rgba(63, 81, 181, 0.2)',
-                tension: 0.1
-            }, {
-                label: 'BG Meta',
-                data: samples.bg_meta || [],
-                borderColor: 'rgb(33, 150, 243)',
-                backgroundColor: 'rgba(33, 150, 243, 0.2)',
-                tension: 0.1
             }]
-        }, 'Background Operations');
-
-        // Operations Rates
-        createChart(`chart-ops-rates-${clusterIndex}`, {
-            labels: timeLabels,
-            datasets: [{
-                label: 'Operations/sec',
-                data: samples.ops || [],
-                borderColor: 'rgb(75, 192, 192)',
-                backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                tension: 0.1
-            }, {
-                label: 'Cmd Set',
-                data: samples.cmd_set || [],
-                borderColor: 'rgb(255, 193, 7)',
-                backgroundColor: 'rgba(255, 193, 7, 0.2)',
-                tension: 0.1
-            }, {
-                label: 'Delete Hits',
-                data: samples.delete_hits || [],
-                borderColor: 'rgb(244, 67, 54)',
-                backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                tension: 0.1
-            }]
-        }, 'Operation Rates');
+        }, 'Operations - Misses');
 
         // STATE GROUP
         // Memory State
@@ -802,14 +839,20 @@ $(document).ready(function() {
 
         const samples = bucketStat.stats.op.samples;
         const timestamps = samples.timestamp || [];
-        const timeLabels = timestamps.map((ts, i) => `-${60 - i}s`);
+        const timeLabels = timestamps.map(ts => {
+            const date = new Date(ts); // Timestamps are already in milliseconds
+            return date.toLocaleTimeString('en-US', { 
+                hour12: false, 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+            });
+        });
 
         // Update each chart type
         const chartKeys = [
             `chart-ops-hits-${clusterIndex}`,
             `chart-ops-misses-${clusterIndex}`,
-            `chart-bg-wait-${clusterIndex}`,
-            `chart-ops-rates-${clusterIndex}`,
             `chart-memory-state-${clusterIndex}`,
             `chart-items-state-${clusterIndex}`,
             `chart-resident-ratio-${clusterIndex}`,
@@ -827,21 +870,34 @@ $(document).ready(function() {
                 charts[key].data.labels = timeLabels;
                 
                 if (key.includes('ops-hits')) {
-                    charts[key].data.datasets[0].data = samples.get_hits || [];
-                    charts[key].data.datasets[1].data = samples.cmd_get || [];
-                    charts[key].data.datasets[2].data = samples.ep_cache_miss_rate || [];
+                    // Recalculate total ops for updates
+                    const cmd_gets = samples.cmd_get || [];
+                    const cmd_sets = samples.cmd_set || [];
+                    const delete_hits = samples.delete_hits || [];
+                    const cas_hits = samples.cas_hits || [];
+                    const lookup_hits = samples.lookup_hits || [];
+                    const incr_hits = samples.incr_hits || [];
+                    const decr_hits = samples.decr_hits || [];
+                    const total_ops = samples.ops || cmd_gets.map((_, i) => 
+                        (cmd_gets[i] || 0) + (cmd_sets[i] || 0) + (delete_hits[i] || 0) + 
+                        (cas_hits[i] || 0) + (lookup_hits[i] || 0) + (incr_hits[i] || 0) + (decr_hits[i] || 0)
+                    );
+                    
+                    charts[key].data.datasets[0].data = cmd_gets;
+                    charts[key].data.datasets[1].data = cmd_sets;
+                    charts[key].data.datasets[2].data = delete_hits;
+                    charts[key].data.datasets[3].data = cas_hits;
+                    charts[key].data.datasets[4].data = lookup_hits;
+                    charts[key].data.datasets[5].data = incr_hits;
+                    charts[key].data.datasets[6].data = decr_hits;
+                    charts[key].data.datasets[7].data = total_ops;
                 } else if (key.includes('ops-misses')) {
                     charts[key].data.datasets[0].data = samples.get_misses || [];
                     charts[key].data.datasets[1].data = samples.delete_misses || [];
-                    charts[key].data.datasets[2].data = samples.incr_misses || [];
-                } else if (key.includes('bg-wait')) {
-                    charts[key].data.datasets[0].data = samples.avg_bg_wait_time || [];
-                    charts[key].data.datasets[1].data = samples.bg_fetched || [];
-                    charts[key].data.datasets[2].data = samples.bg_meta || [];
-                } else if (key.includes('ops-rates')) {
-                    charts[key].data.datasets[0].data = samples.ops || [];
-                    charts[key].data.datasets[1].data = samples.cmd_set || [];
-                    charts[key].data.datasets[2].data = samples.delete_hits || [];
+                    charts[key].data.datasets[2].data = samples.cas_misses || [];
+                    charts[key].data.datasets[3].data = samples.lookup_misses || [];
+                    charts[key].data.datasets[4].data = samples.incr_misses || [];
+                    charts[key].data.datasets[5].data = samples.decr_misses || [];
                 } else if (key.includes('memory-state')) {
                     charts[key].data.datasets[0].data = (samples.mem_used || []).map(val => (val / (1024 * 1024)).toFixed(2));
                     charts[key].data.datasets[1].data = (samples.ep_mem_high_wat || []).map(val => (val / (1024 * 1024)).toFixed(2));

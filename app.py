@@ -65,32 +65,82 @@ async def fetch_bucket_stats(session, host, bucket_name, user, password):
         return {"bucket_name": bucket_name, "stats": None, "error": str(e)}
 
 async def get_all_clusters_data(clusters):
-    """Fetch data from all clusters and their buckets asynchronously."""
+    """Fetch data from all clusters and their buckets asynchronously with timeout handling."""
     async with aiohttp.ClientSession() as session:
-        # Fetch /pools/default for all clusters
-        cluster_tasks = [fetch_cluster_data(session, cluster["host"], cluster["user"], cluster["pass"]) for cluster in clusters]
-        cluster_results = await asyncio.gather(*cluster_tasks)
+        # Fetch /pools/default for all clusters with individual timeouts
+        cluster_tasks = []
+        for cluster in clusters:
+            task = asyncio.create_task(
+                fetch_cluster_data_with_timeout(session, cluster, 15)  # 15 second timeout per cluster
+            )
+            cluster_tasks.append(task)
+        
+        # Wait for all tasks to complete or timeout individually
+        cluster_results = await asyncio.gather(*cluster_tasks, return_exceptions=True)
 
-        # Fetch bucket details for each cluster
+        # Process results and fetch bucket details
         all_results = []
-        for cluster_result in cluster_results:
-            host = cluster_result["host"]
-            user = next(cluster["user"] for cluster in clusters if cluster["host"] == host)
-            password = next(cluster["pass"] for cluster in clusters if cluster["host"] == host)
-            result = {"host": host, "data": cluster_result["data"], "error": cluster_result["error"], "buckets": [], "bucket_stats": []}
+        for i, cluster_result in enumerate(cluster_results):
+            cluster_config = clusters[i]
             
-            if cluster_result["data"]:
-                bucket_names = [bucket["bucketName"] for bucket in cluster_result["data"].get("bucketNames", [])]
-                bucket_tasks = [fetch_bucket_data(session, host, bucket_name, user, password) for bucket_name in bucket_names]
-                bucket_stats_tasks = [fetch_bucket_stats(session, host, bucket_name, user, password) for bucket_name in bucket_names]
+            # Handle exceptions or timeouts
+            if isinstance(cluster_result, Exception):
+                logger.error(f"Error fetching data from {cluster_config['host']}: {str(cluster_result)}")
+                result = {
+                    "host": cluster_config["host"], 
+                    "customName": cluster_config.get("customName"),
+                    "data": None, 
+                    "error": f"Timeout or error: {str(cluster_result)}", 
+                    "buckets": [], 
+                    "bucket_stats": []
+                }
+            else:
+                result = {
+                    "host": cluster_result["host"], 
+                    "customName": cluster_config.get("customName"),
+                    "data": cluster_result["data"], 
+                    "error": cluster_result["error"], 
+                    "buckets": [], 
+                    "bucket_stats": []
+                }
                 
-                bucket_results = await asyncio.gather(*bucket_tasks)
-                bucket_stats_results = await asyncio.gather(*bucket_stats_tasks)
-                
-                result["buckets"] = bucket_results
-                result["bucket_stats"] = bucket_stats_results
+                # Only fetch bucket details if cluster data was successful
+                if cluster_result["data"]:
+                    bucket_names = [bucket["bucketName"] for bucket in cluster_result["data"].get("bucketNames", [])]
+                    if bucket_names:
+                        try:
+                            # Fetch bucket data with timeout
+                            bucket_tasks = [fetch_bucket_data(session, cluster_result["host"], bucket_name, cluster_config["user"], cluster_config["pass"]) for bucket_name in bucket_names]
+                            bucket_stats_tasks = [fetch_bucket_stats(session, cluster_result["host"], bucket_name, cluster_config["user"], cluster_config["pass"]) for bucket_name in bucket_names]
+                            
+                            # Use timeout for bucket operations too
+                            bucket_results = await asyncio.wait_for(asyncio.gather(*bucket_tasks, return_exceptions=True), timeout=10)
+                            bucket_stats_results = await asyncio.wait_for(asyncio.gather(*bucket_stats_tasks, return_exceptions=True), timeout=10)
+                            
+                            result["buckets"] = [r for r in bucket_results if not isinstance(r, Exception)]
+                            result["bucket_stats"] = [r for r in bucket_stats_results if not isinstance(r, Exception)]
+                            
+                        except asyncio.TimeoutError:
+                            logger.warning(f"Bucket data fetch timeout for {cluster_result['host']}")
+                        except Exception as e:
+                            logger.error(f"Error fetching bucket data for {cluster_result['host']}: {str(e)}")
+            
             all_results.append(result)
         return all_results
+
+async def fetch_cluster_data_with_timeout(session, cluster_config, timeout_seconds):
+    """Fetch cluster data with individual timeout handling."""
+    try:
+        return await asyncio.wait_for(
+            fetch_cluster_data(session, cluster_config["host"], cluster_config["user"], cluster_config["pass"]),
+            timeout=timeout_seconds
+        )
+    except asyncio.TimeoutError:
+        return {
+            "host": cluster_config["host"],
+            "data": None,
+            "error": f"Request timeout after {timeout_seconds} seconds"
+        }
 
 def load_config():
     """Load cluster configurations from config.json."""
@@ -117,9 +167,14 @@ def process_cluster_data(clusters_data):
                         "uuid": bucket["data"].get("uuid", "Unknown"),
                         "bucketType": bucket["data"].get("bucketType", "Unknown"),
                         "storageBackend": bucket["data"].get("storageBackend", "Unknown"),
-                        "numVBuckets": bucket["data"].get("numVBuckets", 0),
                         "replicaNumber": bucket["data"].get("replicaNumber", 0),
                         "basicStats": bucket["data"].get("basicStats", {}),
+                        "quota": bucket["data"].get("quota", {}),
+                        "evictionPolicy": bucket["data"].get("evictionPolicy", "Unknown"),
+                        "durabilityMinLevel": bucket["data"].get("durabilityMinLevel", "Unknown"),
+                        "quotaPercentUsed": bucket["data"].get("basicStats", {}).get("quotaPercentUsed", 0),
+                        "opsPerSec": bucket["data"].get("basicStats", {}).get("opsPerSec", 0),
+                        "diskFetches": bucket["data"].get("basicStats", {}).get("diskFetches", 0),
                         "error": None
                     })
                 else:
@@ -128,9 +183,14 @@ def process_cluster_data(clusters_data):
                         "uuid": "Unknown",
                         "bucketType": "Unknown",
                         "storageBackend": "Unknown",
-                        "numVBuckets": 0,
                         "replicaNumber": 0,
                         "basicStats": {},
+                        "quota": {},
+                        "evictionPolicy": "Unknown",
+                        "durabilityMinLevel": "Unknown",
+                        "quotaPercentUsed": 0,
+                        "opsPerSec": 0,
+                        "diskFetches": 0,
                         "error": bucket["error"]
                     })
             
@@ -150,6 +210,7 @@ def process_cluster_data(clusters_data):
             
             cluster_info = {
                 "host": cluster["host"],
+                "customName": cluster.get("customName"),
                 "clusterName": data.get("clusterName", "Unknown"),
                 "clusterUUID": data.get("uuid", "Unknown"),
                 "health": all(node["status"] == "healthy" for node in data.get("nodes", [])),
@@ -182,6 +243,7 @@ def process_cluster_data(clusters_data):
         else:
             cluster_info = {
                 "host": cluster["host"],
+                "customName": cluster.get("customName"),
                 "clusterName": "Error",
                 "clusterUUID": "Unknown",
                 "health": False,

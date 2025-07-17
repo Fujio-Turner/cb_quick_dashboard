@@ -2,11 +2,13 @@
     {
         "host": "http://127.0.0.1:8091",
         "user": "Administrator",
-        "pass": "password"
+        "pass": "password",
+        "customName": "Local Dev"
     },
     {
-        "host": "http://6.6.6.6:8091",
+        "host": "http://2.2.2.2:8091",
         "user": "Administrator",
-        "pass": "password"
+        "pass": "password",
+        "customName": "Production"
     }
 ]
