@@ -3,6 +3,30 @@ $(document).ready(function() {
     let charts = {};
     let isInitialized = false;
 
+    function getHealthBadgeClass(cluster) {
+        if (cluster.not_watching) {
+            return 'badge-warning'; // Yellow for not watching
+        } else if (cluster.health === true) {
+            return 'badge-success'; // Green for healthy
+        } else if (cluster.health === false) {
+            return 'badge-danger'; // Red for unhealthy
+        } else {
+            return 'badge-secondary'; // Gray for unknown
+        }
+    }
+
+    function getHealthBadgeText(cluster) {
+        if (cluster.not_watching) {
+            return 'Not Watching';
+        } else if (cluster.health === true) {
+            return 'Healthy';
+        } else if (cluster.health === false) {
+            return 'Unhealthy';
+        } else {
+            return 'Unknown';
+        }
+    }
+
     function fetchClusters() {
         $.ajax({
             url: '/api/clusters',
@@ -41,8 +65,8 @@ $(document).ready(function() {
                                 <small class="text-muted cluster-host">${cluster.host}</small>
                             </div>
                             <div class="text-right">
-                                <span class="badge cluster-health-badge badge-${cluster.health ? 'success' : 'danger'} mb-1">
-                                    ${cluster.health ? 'Healthy' : 'Unhealthy'}
+                                <span class="badge cluster-health-badge ${getHealthBadgeClass(cluster)} mb-1">
+                                    ${getHealthBadgeText(cluster)}
                                 </span>
                                 <br>
                                 <small class="text-muted">UUID: <span class="cluster-uuid">${cluster.clusterUUID}</span></small>
@@ -60,7 +84,8 @@ $(document).ready(function() {
                         </div>
                     </div>
                     <div class="card-body">
-                        ${cluster.error ? `<div class="alert alert-danger">Error: ${cluster.error}</div>` : `
+                        ${cluster.not_watching ? `<div class="alert alert-warning"><strong>This cluster is not being monitored.</strong><br>Set "watch": true in config.json to enable monitoring.</div>` : 
+                          cluster.error ? `<div class="alert alert-danger">Error: ${cluster.error}</div>` : `
                             <div class="tabs" id="tabs-${index}">
                                 <ul>
                                     <li><a href="#tabs-nodes-${index}">Nodes (${cluster.nodes.length})</a></li>
@@ -167,9 +192,9 @@ $(document).ready(function() {
                 clusterDiv.find('.cluster-name').text(`${cluster.clusterName}${cluster.customName ? ` (${cluster.customName})` : ''}`);
                 clusterDiv.find('.cluster-host').text(cluster.host);
                 clusterDiv.find('.cluster-health-badge')
-                    .removeClass('badge-success badge-danger')
-                    .addClass(cluster.health ? 'badge-success' : 'badge-danger')
-                    .text(cluster.health ? 'Healthy' : 'Unhealthy');
+                    .removeClass('badge-success badge-danger badge-warning badge-secondary')
+                    .addClass(getHealthBadgeClass(cluster))
+                    .text(getHealthBadgeText(cluster));
                 clusterDiv.find('.cluster-uuid').text(cluster.clusterUUID);
                 clusterDiv.find('.cluster-memory').html(`${cluster.memory.used.toFixed(2)} / ${cluster.memory.total.toFixed(2)} GB 
                     (Quota: ${cluster.memory.quotaTotal.toFixed(2)} GB)`);

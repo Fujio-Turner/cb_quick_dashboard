@@ -167,6 +167,12 @@ body {
     font-size: 0.75em;
 }
 
+.badge-warning {
+    color: #856404;
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+}
+
 .spinner-border {
     width: 3rem;
     height: 3rem;

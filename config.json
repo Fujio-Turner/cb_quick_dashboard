@@ -3,12 +3,14 @@
         "host": "http://127.0.0.1:8091",
         "user": "Administrator",
         "pass": "password",
-        "customName": "Local Dev"
+        "customName": "Local Dev",
+        "watch":false
     },
     {
         "host": "http://2.2.2.2:8091",
         "user": "Administrator",
         "pass": "password",
-        "customName": "Production"
+        "customName": "Production",
+        "watch":false
     }
 ]

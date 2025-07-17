@@ -69,11 +69,20 @@ async def get_all_clusters_data(clusters):
     async with aiohttp.ClientSession() as session:
         # Fetch /pools/default for all clusters with individual timeouts
         cluster_tasks = []
+        cluster_configs = []
+        
         for cluster in clusters:
-            task = asyncio.create_task(
-                fetch_cluster_data_with_timeout(session, cluster, 15)  # 15 second timeout per cluster
-            )
-            cluster_tasks.append(task)
+            # Check if cluster should be watched
+            if cluster.get("watch", True):  # Default to True if watch field is not present
+                task = asyncio.create_task(
+                    fetch_cluster_data_with_timeout(session, cluster, 15)  # 15 second timeout per cluster
+                )
+                cluster_tasks.append(task)
+                cluster_configs.append(cluster)
+            else:
+                # For unwatched clusters, create a placeholder result
+                cluster_tasks.append(asyncio.create_task(create_not_watching_result(cluster)))
+                cluster_configs.append(cluster)
         
         # Wait for all tasks to complete or timeout individually
         cluster_results = await asyncio.gather(*cluster_tasks, return_exceptions=True)
@@ -81,7 +90,7 @@ async def get_all_clusters_data(clusters):
         # Process results and fetch bucket details
         all_results = []
         for i, cluster_result in enumerate(cluster_results):
-            cluster_config = clusters[i]
+            cluster_config = cluster_configs[i]
             
             # Handle exceptions or timeouts
             if isinstance(cluster_result, Exception):
@@ -103,6 +112,9 @@ async def get_all_clusters_data(clusters):
                     "buckets": [], 
                     "bucket_stats": []
                 }
+                # Preserve not_watching flag if present
+                if cluster_result.get("not_watching"):
+                    result["not_watching"] = True
                 
                 # Only fetch bucket details if cluster data was successful
                 if cluster_result["data"]:
@@ -142,6 +154,15 @@ async def fetch_cluster_data_with_timeout(session, cluster_config, timeout_secon
             "error": f"Request timeout after {timeout_seconds} seconds"
         }
 
+async def create_not_watching_result(cluster_config):
+    """Create a result for clusters that are not being watched."""
+    return {
+        "host": cluster_config["host"],
+        "data": None,
+        "error": None,
+        "not_watching": True
+    }
+
 def load_config():
     """Load cluster configurations from config.json."""
     try:
@@ -155,7 +176,24 @@ def process_cluster_data(clusters_data):
     """Process cluster and bucket data for rendering."""
     clusters = []
     for cluster in clusters_data:
-        if cluster["data"]:
+        if cluster.get("not_watching", False):
+            # Handle not watching case
+            cluster_info = {
+                "host": cluster["host"],
+                "customName": cluster.get("customName"),
+                "clusterName": "Not Watching",
+                "clusterUUID": "N/A",
+                "health": None,  # Use None to indicate not watching status
+                "memory": {"total": 0, "used": 0, "quotaTotal": 0},
+                "disk": {"total": 0, "used": 0, "free": 0},
+                "nodes": [],
+                "buckets": [],
+                "bucket_stats": [],
+                "systemStats": {},
+                "error": None,
+                "not_watching": True,
+            }
+        elif cluster["data"]:
             data = cluster["data"]
             bucket_details = []
             bucket_stats = []
