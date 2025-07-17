@@ -1,0 +1,192 @@
+body {
+    background-color: #f8f9fa;
+}
+
+.clusters {
+    padding: 20px 0;
+}
+
+.cluster {
+    border: 1px solid #dee2e6;
+    margin-bottom: 20px;
+    background-color: #ffffff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.2s ease;
+}
+
+.cluster:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.drag-handle {
+    cursor: move;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.drag-handle:hover {
+    background-color: #e9ecef;
+}
+
+.ui-tabs .ui-tabs-panel {
+    padding: 15px;
+    min-height: 200px;
+}
+
+.ui-tabs .ui-tabs-nav {
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.ui-tabs .ui-tabs-nav li {
+    margin: 0;
+    border: none;
+}
+
+.ui-tabs .ui-tabs-nav li a {
+    padding: 10px 15px;
+    color: #495057;
+    text-decoration: none;
+    border: none;
+    background: none;
+}
+
+.ui-tabs .ui-tabs-nav li.ui-tabs-active a {
+    background-color: #ffffff;
+    color: #007bff;
+    border-bottom: 2px solid #007bff;
+}
+
+.ui-sortable-placeholder {
+    border: 2px dashed #007bff;
+    background-color: #f8f9fa;
+    visibility: visible !important;
+    height: 150px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+}
+
+.ui-sortable-placeholder::before {
+    content: "Drop here";
+    display: block;
+    text-align: center;
+    color: #007bff;
+    font-size: 18px;
+    line-height: 150px;
+}
+
+.ui-sortable-helper {
+    background-color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    border-radius: 5px;
+    z-index: 1000;
+}
+
+.charts-container {
+    padding: 15px;
+}
+
+.charts-container canvas {
+    max-height: 250px;
+    margin-bottom: 20px;
+}
+
+.charts-container h5 {
+    color: #495057;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 5px;
+    margin-bottom: 20px;
+}
+
+.bucket-selector {
+    margin-bottom: 15px;
+}
+
+.selected-bucket-info {
+    text-align: left;
+}
+
+.selected-bucket-info h5 {
+    color: #495057;
+    margin-bottom: 5px;
+}
+
+.selected-bucket-charts {
+    margin-top: 15px;
+}
+
+.bucket-dropdown-section {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+}
+
+.node-link {
+    color: #007bff;
+    text-decoration: none;
+}
+
+.node-link:hover {
+    color: #0056b3;
+    text-decoration: underline;
+}
+
+.chart-group {
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    padding: 20px;
+    margin-bottom: 20px;
+    background-color: #ffffff;
+}
+
+.chart-group-title {
+    color: #495057;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #007bff;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.table-responsive {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.table th {
+    background-color: #f8f9fa;
+    border-top: none;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+
+.spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
+
+#last-updated {
+    text-align: right;
+    font-style: italic;
+}
+
+@media (max-width: 768px) {
+    .cluster {
+        margin-bottom: 15px;
+    }
+    
+    .table-responsive {
+        max-height: 300px;
+    }
+    
+    .drag-handle h4 {
+        font-size: 1.1rem;
+    }
+}

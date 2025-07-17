@@ -1,0 +1,12 @@
+[
+    {
+        "host": "http://127.0.0.1:8091",
+        "user": "Administrator",
+        "pass": "password"
+    },
+    {
+        "host": "http://6.6.6.6:8091",
+        "user": "Administrator",
+        "pass": "password"
+    }
+]
