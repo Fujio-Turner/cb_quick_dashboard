@@ -472,18 +472,18 @@ $(document).ready(function() {
                     <h6 class="chart-group-title">Operations</h6>
                     <div class="row">
                         <div class="col-md-6">
-                            <canvas id="chart-ops-hits-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-ops-hits-${index}" width="400" height="333"></canvas>
                         </div>
                         <div class="col-md-6">
-                            <canvas id="chart-ops-misses-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-ops-misses-${index}" width="400" height="333"></canvas>
                         </div>
                     </div>
                     <div class="row mt-3">
                         <div class="col-md-6">
-                            <canvas id="chart-bg-operations-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-bg-operations-${index}" width="400" height="333"></canvas>
                         </div>
                         <div class="col-md-6">
-                            <!-- Empty for spacing -->
+                            <canvas id="chart-ops-errors-${index}" width="400" height="333"></canvas>
                         </div>
                     </div>
                 </div>
@@ -493,18 +493,18 @@ $(document).ready(function() {
                     <h6 class="chart-group-title">State</h6>
                     <div class="row">
                         <div class="col-md-6">
-                            <canvas id="chart-memory-state-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-memory-state-${index}" width="400" height="333"></canvas>
                         </div>
                         <div class="col-md-6">
-                            <canvas id="chart-items-state-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-items-state-${index}" width="400" height="333"></canvas>
                         </div>
                     </div>
                     <div class="row mt-3">
                         <div class="col-md-6">
-                            <canvas id="chart-resident-ratio-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-resident-ratio-${index}" width="400" height="333"></canvas>
                         </div>
                         <div class="col-md-6">
-                            <canvas id="chart-connections-cpu-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-connections-cpu-${index}" width="400" height="333"></canvas>
                         </div>
                     </div>
                 </div>
@@ -514,18 +514,18 @@ $(document).ready(function() {
                     <h6 class="chart-group-title">Disk</h6>
                     <div class="row">
                         <div class="col-md-6">
-                            <canvas id="chart-disk-size-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-disk-size-${index}" width="400" height="333"></canvas>
                         </div>
                         <div class="col-md-6">
-                            <canvas id="chart-disk-commit-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-disk-commit-${index}" width="400" height="333"></canvas>
                         </div>
                     </div>
                     <div class="row mt-3">
                         <div class="col-md-6">
-                            <canvas id="chart-disk-queue-active-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-disk-queue-active-${index}" width="400" height="333"></canvas>
                         </div>
                         <div class="col-md-6">
-                            <canvas id="chart-disk-queue-replica-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-disk-queue-replica-${index}" width="400" height="333"></canvas>
                         </div>
                     </div>
                 </div>
@@ -535,18 +535,18 @@ $(document).ready(function() {
                     <h6 class="chart-group-title">vBucket</h6>
                     <div class="row">
                         <div class="col-md-6">
-                            <canvas id="chart-dcp-operations-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-dcp-operations-${index}" width="400" height="333"></canvas>
                         </div>
                         <div class="col-md-6">
-                            <canvas id="chart-dcp-backoff-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-dcp-backoff-${index}" width="400" height="333"></canvas>
                         </div>
                     </div>
                     <div class="row mt-3">
                         <div class="col-md-6">
-                            <canvas id="chart-dcp-queue-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-dcp-queue-${index}" width="400" height="333"></canvas>
                         </div>
                         <div class="col-md-6">
-                            <canvas id="chart-dcp-producer-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-dcp-producer-${index}" width="400" height="333"></canvas>
                         </div>
                     </div>
                 </div>
@@ -556,15 +556,15 @@ $(document).ready(function() {
                     <h6 class="chart-group-title">XDCR</h6>
                     <div class="row">
                         <div class="col-md-6">
-                            <canvas id="chart-xdcr-operations-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-xdcr-operations-${index}" width="400" height="333"></canvas>
                         </div>
                         <div class="col-md-6">
-                            <canvas id="chart-meta-operations-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-meta-operations-${index}" width="400" height="333"></canvas>
                         </div>
                     </div>
                     <div class="row mt-3">
                         <div class="col-md-6">
-                            <canvas id="chart-xdcr-errors-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-xdcr-errors-${index}" width="400" height="333"></canvas>
                         </div>
                         <div class="col-md-6">
                             <!-- Empty for spacing -->
@@ -577,10 +577,10 @@ $(document).ready(function() {
                     <h6 class="chart-group-title">Other</h6>
                     <div class="row">
                         <div class="col-md-6">
-                            <canvas id="chart-other-metrics-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-other-metrics-${index}" width="400" height="333"></canvas>
                         </div>
                         <div class="col-md-6">
-                            <canvas id="chart-other-stats-${index}" width="400" height="200"></canvas>
+                            <canvas id="chart-other-stats-${index}" width="400" height="333"></canvas>
                         </div>
                     </div>
                 </div>
@@ -687,56 +687,56 @@ $(document).ready(function() {
                 data: cmd_gets,
                 borderColor: 'rgb(54, 162, 235)',
                 backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Cmd Sets',
                 data: cmd_sets,
                 borderColor: 'rgb(255, 193, 7)',
                 backgroundColor: 'rgba(255, 193, 7, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Delete Hits',
                 data: delete_hits,
                 borderColor: 'rgb(244, 67, 54)',
                 backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'CAS Hits',
                 data: cas_hits,
                 borderColor: 'rgb(156, 39, 176)',
                 backgroundColor: 'rgba(156, 39, 176, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Lookup Hits',
                 data: lookup_hits,
                 borderColor: 'rgb(76, 175, 80)',
                 backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Increment Hits',
                 data: incr_hits,
                 borderColor: 'rgb(255, 152, 0)',
                 backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Decrement Hits',
                 data: decr_hits,
                 borderColor: 'rgb(103, 58, 183)',
                 backgroundColor: 'rgba(103, 58, 183, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Total Ops',
                 data: total_ops,
                 borderColor: 'rgb(33, 150, 243)',
                 backgroundColor: 'rgba(33, 150, 243, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 borderWidth: 3,
                 yAxisID: 'y'
             }, {
@@ -744,7 +744,8 @@ $(document).ready(function() {
                 data: samples.ep_cache_miss_ratio || [],
                 borderColor: 'rgb(255, 87, 34)',
                 backgroundColor: 'rgba(255, 87, 34, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
+                borderDash: [5, 5],
                 yAxisID: 'y1'
             }]
         }, 'Operations - Hits/Commands', {
@@ -760,37 +761,37 @@ $(document).ready(function() {
                 data: samples.get_misses || [],
                 borderColor: 'rgb(255, 99, 132)',
                 backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'Delete Misses',
                 data: samples.delete_misses || [],
                 borderColor: 'rgb(255, 159, 64)',
                 backgroundColor: 'rgba(255, 159, 64, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'CAS Misses',
                 data: samples.cas_misses || [],
                 borderColor: 'rgb(156, 39, 176)',
                 backgroundColor: 'rgba(156, 39, 176, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'Lookup Misses',
                 data: samples.lookup_misses || [],
                 borderColor: 'rgb(76, 175, 80)',
                 backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'Increment Misses',
                 data: samples.incr_misses || [],
                 borderColor: 'rgb(255, 152, 0)',
                 backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'Decrement Misses',
                 data: samples.decr_misses || [],
                 borderColor: 'rgb(103, 58, 183)',
                 backgroundColor: 'rgba(103, 58, 183, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }]
         }, 'Operations - Misses');
 
@@ -802,27 +803,58 @@ $(document).ready(function() {
                 data: samples.ep_bg_fetched || [],
                 borderColor: 'rgb(33, 150, 243)',
                 backgroundColor: 'rgba(33, 150, 243, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Background Gets',
                 data: samples.ep_num_ops_get_meta || [],
                 borderColor: 'rgb(76, 175, 80)',
                 backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Background Wait Time (s)',
                 data: samples.bg_wait_time || [],
                 borderColor: 'rgb(244, 67, 54)',
                 backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
+                borderDash: [5, 5],
                 yAxisID: 'y1'
             }]
         }, 'Background Operations', {
             y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Operations/Items' } },
             y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Wait Time (s)' }, grid: { drawOnChartArea: false } }
         });
+
+        // Operations Errors
+        createChart(`chart-ops-errors-${clusterIndex}`, {
+            labels: timeLabels,
+            datasets: [{
+                label: 'Data Read Failed',
+                data: samples.ep_data_read_failed || [],
+                borderColor: 'rgb(244, 67, 54)',
+                backgroundColor: 'rgba(244, 67, 54, 0.2)',
+                tension: 0.4
+            }, {
+                label: 'Data Write Failed',
+                data: samples.ep_data_write_failed || [],
+                borderColor: 'rgb(255, 99, 132)',
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                tension: 0.4
+            }, {
+                label: 'Item Commit Failed',
+                data: samples.ep_item_commit_failed || [],
+                borderColor: 'rgb(255, 193, 7)',
+                backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                tension: 0.4
+            }, {
+                label: 'Temp OOM Errors',
+                data: samples.ep_tmp_oom_errors || [],
+                borderColor: 'rgb(156, 39, 176)',
+                backgroundColor: 'rgba(156, 39, 176, 0.2)',
+                tension: 0.4
+            }]
+        }, 'Operations - Errors');
 
         // STATE GROUP
         // Memory State
@@ -833,21 +865,21 @@ $(document).ready(function() {
                 data: (samples.mem_used || []).map(val => (val / (1024 * 1024)).toFixed(2)),
                 borderColor: 'rgb(153, 102, 255)',
                 backgroundColor: 'rgba(153, 102, 255, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'EP Mem High Watermark (MB)',
                 data: (samples.ep_mem_high_wat || []).map(val => (val / (1024 * 1024)).toFixed(2)),
                 borderColor: 'rgb(255, 99, 132)',
                 backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'EP Mem Low Watermark (MB)',
                 data: (samples.ep_mem_low_wat || []).map(val => (val / (1024 * 1024)).toFixed(2)),
                 borderColor: 'rgb(255, 152, 0)',
                 backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }]
         }, 'Memory State', {
@@ -862,19 +894,19 @@ $(document).ready(function() {
                 data: samples.curr_items || [],
                 borderColor: 'rgb(255, 159, 64)',
                 backgroundColor: 'rgba(255, 159, 64, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'EP Meta Data (MB)',
                 data: (samples.ep_meta || []).map(val => (val / (1024 * 1024)).toFixed(2)),
                 borderColor: 'rgb(156, 39, 176)',
                 backgroundColor: 'rgba(156, 39, 176, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'vB Active Items',
                 data: samples.vb_active_curr_items || [],
                 borderColor: 'rgb(76, 175, 80)',
                 backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }]
         }, 'Items & Documents');
 
@@ -886,19 +918,19 @@ $(document).ready(function() {
                 data: samples.vb_active_resident_items_ratio || [],
                 borderColor: 'rgb(76, 175, 80)',
                 backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'Replica Resident Ratio (%)',
                 data: samples.vb_replica_resident_items_ratio || [],
                 borderColor: 'rgb(255, 152, 0)',
                 backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'Pending Resident Ratio (%)',
                 data: samples.vb_pending_resident_items_ratio || [],
                 borderColor: 'rgb(244, 67, 54)',
                 backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }]
         }, 'Items in Memory Ratio', {
             y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Percentage (%)' }, min: 0, max: 100 }
@@ -912,21 +944,23 @@ $(document).ready(function() {
                 data: samples.curr_connections || [],
                 borderColor: 'rgb(156, 39, 176)',
                 backgroundColor: 'rgba(156, 39, 176, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'CPU Utilization (%)',
                 data: samples.cpu_utilization_rate || [],
                 borderColor: 'rgb(255, 99, 132)',
                 backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
+                borderDash: [5, 5],
                 yAxisID: 'y1'
             }, {
                 label: 'CPU User (%)',
                 data: samples.cpu_user_rate || [],
                 borderColor: 'rgb(54, 162, 235)',
                 backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
+                borderDash: [5, 5],
                 yAxisID: 'y1'
             }]
         }, 'Connections & CPU', {
@@ -943,21 +977,22 @@ $(document).ready(function() {
                 data: (samples.couch_total_disk_size || []).map(val => (val / (1024 * 1024)).toFixed(2)),
                 borderColor: 'rgb(255, 205, 86)',
                 backgroundColor: 'rgba(255, 205, 86, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Data Size (MB)',
                 data: (samples.couch_docs_data_size || []).map(val => (val / (1024 * 1024)).toFixed(2)),
                 borderColor: 'rgb(75, 192, 192)',
                 backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Fragmentation (%)',
                 data: samples.couch_docs_fragmentation || [],
                 borderColor: 'rgb(244, 67, 54)',
                 backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
+                borderDash: [5, 5],
                 yAxisID: 'y1'
             }]
         }, 'Disk Size & Fragmentation', {
@@ -973,14 +1008,15 @@ $(document).ready(function() {
                 data: samples.disk_write_queue || [],
                 borderColor: 'rgb(103, 58, 183)',
                 backgroundColor: 'rgba(103, 58, 183, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Avg Disk Commit Time (ms)',
                 data: (samples.avg_disk_commit_time || []).map(val => (val * 1000).toFixed(2)),
                 borderColor: 'rgb(244, 67, 54)',
                 backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
+                borderDash: [5, 5],
                 yAxisID: 'y1'
             }]
         }, 'Disk Commit Operations', {
@@ -996,21 +1032,22 @@ $(document).ready(function() {
                 data: samples.vb_active_queue_fill || [],
                 borderColor: 'rgb(76, 175, 80)',
                 backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Active Drain',
                 data: samples.vb_active_queue_drain || [],
                 borderColor: 'rgb(139, 195, 74)',
                 backgroundColor: 'rgba(139, 195, 74, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Active Queue Age (s)',
                 data: (samples.vb_active_queue_age || []).map(val => (val / 1000000000).toFixed(3)),
                 borderColor: 'rgb(255, 193, 7)',
                 backgroundColor: 'rgba(255, 193, 7, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
+                borderDash: [5, 5],
                 yAxisID: 'y1'
             }]
         }, 'Active Queue Operations', {
@@ -1026,21 +1063,22 @@ $(document).ready(function() {
                 data: samples.vb_replica_queue_fill || [],
                 borderColor: 'rgb(255, 152, 0)',
                 backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Replica Drain',
                 data: samples.vb_replica_queue_drain || [],
                 borderColor: 'rgb(255, 183, 77)',
                 backgroundColor: 'rgba(255, 183, 77, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
                 yAxisID: 'y'
             }, {
                 label: 'Replica Queue Age (s)',
                 data: (samples.vb_replica_queue_age || []).map(val => (val / 1000000000).toFixed(3)),
                 borderColor: 'rgb(255, 193, 7)',
                 backgroundColor: 'rgba(255, 193, 7, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
+                borderDash: [5, 5],
                 yAxisID: 'y1'
             }]
         }, 'Replica Queue Operations', {
@@ -1057,19 +1095,19 @@ $(document).ready(function() {
                 data: samples.vb_active_num || [],
                 borderColor: 'rgb(76, 175, 80)',
                 backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'vBuckets Replica',
                 data: samples.vb_replica_num || [],
                 borderColor: 'rgb(255, 152, 0)',
                 backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'vBuckets Pending',
                 data: samples.vb_pending_num || [],
                 borderColor: 'rgb(244, 67, 54)',
                 backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }]
         }, 'vBucket Distribution');
 
@@ -1081,19 +1119,13 @@ $(document).ready(function() {
                 data: samples.ep_total_cache_size || [],
                 borderColor: 'rgb(33, 150, 243)',
                 backgroundColor: 'rgba(33, 150, 243, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'Auth Errors',
                 data: samples.auth_errors || [],
                 borderColor: 'rgb(244, 67, 54)',
                 backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                tension: 0.1
-            }, {
-                label: 'Temp OOM Errors',
-                data: samples.ep_tmp_oom_errors || [],
-                borderColor: 'rgb(255, 99, 132)',
-                backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }]
         }, 'Other Statistics');
 
@@ -1106,19 +1138,20 @@ $(document).ready(function() {
                 data: samples.ep_dcp_2i_items_remaining || [],
                 borderColor: 'rgb(76, 175, 80)',
                 backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'DCP 2i Items Sent',
                 data: samples.ep_dcp_2i_items_sent || [],
                 borderColor: 'rgb(255, 152, 0)',
                 backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'DCP 2i Total Bytes',
                 data: (samples.ep_dcp_2i_total_bytes || []).map(val => (val / (1024 * 1024)).toFixed(2)),
                 borderColor: 'rgb(54, 162, 235)',
                 backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                tension: 0.1,
+                tension: 0.4,
+                borderDash: [5, 5],
                 yAxisID: 'y1'
             }]
         }, 'DCP 2i Operations', {
@@ -1134,25 +1167,25 @@ $(document).ready(function() {
                 data: samples.ep_dcp_2i_backoff || [],
                 borderColor: 'rgb(244, 67, 54)',
                 backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'DCP Other Backoff',
                 data: samples.ep_dcp_other_backoff || [],
                 borderColor: 'rgb(255, 99, 132)',
                 backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'DCP Replica Backoff',
                 data: samples.ep_dcp_replica_backoff || [],
                 borderColor: 'rgb(255, 193, 7)',
                 backgroundColor: 'rgba(255, 193, 7, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'DCP Views Backoff',
                 data: samples.ep_dcp_views_backoff || [],
                 borderColor: 'rgb(156, 39, 176)',
                 backgroundColor: 'rgba(156, 39, 176, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }]
         }, 'DCP Backoff Operations');
 
@@ -1164,19 +1197,19 @@ $(document).ready(function() {
                 data: samples.ep_dcp_queue_fill || [],
                 borderColor: 'rgb(33, 150, 243)',
                 backgroundColor: 'rgba(33, 150, 243, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'DCP Queue Drain',
                 data: samples.ep_dcp_queue_drain || [],
                 borderColor: 'rgb(76, 175, 80)',
                 backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'DCP Queue Size',
                 data: samples.ep_dcp_queue_size || [],
                 borderColor: 'rgb(255, 152, 0)',
                 backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }]
         }, 'DCP Queue Operations');
 
@@ -1188,19 +1221,19 @@ $(document).ready(function() {
                 data: samples.ep_dcp_producer_count || [],
                 borderColor: 'rgb(103, 58, 183)',
                 backgroundColor: 'rgba(103, 58, 183, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'DCP Replica Producer Count',
                 data: samples.ep_dcp_replica_producer_count || [],
                 borderColor: 'rgb(63, 81, 181)',
                 backgroundColor: 'rgba(63, 81, 181, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'DCP Other Producer Count',
                 data: samples.ep_dcp_other_producer_count || [],
                 borderColor: 'rgb(255, 87, 34)',
                 backgroundColor: 'rgba(255, 87, 34, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }]
         }, 'DCP Producer Operations');
 
@@ -1213,19 +1246,19 @@ $(document).ready(function() {
                 data: samples.xdc_ops || [],
                 borderColor: 'rgb(76, 175, 80)',
                 backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'XDCR Optimistic Replication',
                 data: samples.replication_active_vbreps || [],
                 borderColor: 'rgb(33, 150, 243)',
                 backgroundColor: 'rgba(33, 150, 243, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'XDCR Waiting Vbreps',
                 data: samples.replication_waiting_vbreps || [],
                 borderColor: 'rgb(255, 152, 0)',
                 backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }]
         }, 'XDCR Operations');
 
@@ -1237,13 +1270,13 @@ $(document).ready(function() {
                 data: samples.ep_num_ops_get_meta || [],
                 borderColor: 'rgb(76, 175, 80)',
                 backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'Set Meta Operations',
                 data: samples.ep_num_ops_set_meta || [],
                 borderColor: 'rgb(255, 152, 0)',
                 backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }]
         }, 'Meta Operations');
 
@@ -1255,19 +1288,19 @@ $(document).ready(function() {
                 data: samples.replication_checkpoint_ops || [],
                 borderColor: 'rgb(244, 67, 54)',
                 backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'XDCR Rate Limit',
                 data: samples.replication_rate_limit || [],
                 borderColor: 'rgb(255, 99, 132)',
                 backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }, {
                 label: 'XDCR Errors',
                 data: samples.replication_errors || [],
                 borderColor: 'rgb(255, 193, 7)',
                 backgroundColor: 'rgba(255, 193, 7, 0.2)',
-                tension: 0.1
+                tension: 0.4
             }]
         }, 'XDCR Errors & Status');
     }
@@ -1290,8 +1323,7 @@ $(document).ready(function() {
             x: {
                 display: true,
                 title: {
-                    display: true,
-                    text: 'Time'
+                    display: false
                 }
             },
             y: {
@@ -1478,6 +1510,11 @@ $(document).ready(function() {
                     charts[key].data.datasets[0].data = samples.ep_bg_fetched || [];
                     charts[key].data.datasets[1].data = samples.ep_num_ops_get_meta || [];
                     charts[key].data.datasets[2].data = samples.bg_wait_time || [];
+                } else if (key.includes('ops-errors')) {
+                    charts[key].data.datasets[0].data = samples.ep_data_read_failed || [];
+                    charts[key].data.datasets[1].data = samples.ep_data_write_failed || [];
+                    charts[key].data.datasets[2].data = samples.ep_item_commit_failed || [];
+                    charts[key].data.datasets[3].data = samples.ep_tmp_oom_errors || [];
                 } else if (key.includes('memory-state')) {
                     charts[key].data.datasets[0].data = (samples.mem_used || []).map(val => (val / (1024 * 1024)).toFixed(2));
                     charts[key].data.datasets[1].data = (samples.ep_mem_high_wat || []).map(val => (val / (1024 * 1024)).toFixed(2));
@@ -1516,7 +1553,6 @@ $(document).ready(function() {
                 } else if (key.includes('other-stats')) {
                     charts[key].data.datasets[0].data = samples.ep_total_cache_size || [];
                     charts[key].data.datasets[1].data = samples.auth_errors || [];
-                    charts[key].data.datasets[2].data = samples.ep_tmp_oom_errors || [];
                 } else if (key.includes('dcp-operations')) {
                     charts[key].data.datasets[0].data = samples.ep_dcp_2i_items_remaining || [];
                     charts[key].data.datasets[1].data = samples.ep_dcp_2i_items_sent || [];
