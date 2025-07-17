@@ -112,8 +112,8 @@ $(document).ready(function() {
                                     </div>
                                 </div>
                                 <div id="tabs-stats-${index}">
-                                    <div class="row system-stats">
-                                        ${generateSystemStats(cluster.systemStats)}
+                                    <div class="system-stats">
+                                        ${generateSystemStats(cluster.systemStats, cluster)}
                                     </div>
                                 </div>
                                 <div id="tabs-charts-${index}">
@@ -135,10 +135,21 @@ $(document).ready(function() {
                 const tabId = ui.newPanel.attr('id');
                 const clusterIndex = tabId.split('-')[2];
                 
+                console.log('🔄 Tab activated:', tabId, 'clusterIndex:', clusterIndex);
+                
                 if (tabId.includes('charts')) {
-                    setTimeout(() => {
-                        initializeCharts(clustersData[clusterIndex], clusterIndex);
-                    }, 100);
+                    // Check if charts are already initialized for this cluster
+                    const chartExists = Object.keys(charts).some(key => key.includes(`-${clusterIndex}`));
+                    console.log('📊 Charts tab activated - chartExists:', chartExists, 'existing charts:', Object.keys(charts).filter(key => key.includes(`-${clusterIndex}`)));
+                    
+                    if (!chartExists) {
+                        console.log('🚀 Initializing charts for cluster:', clusterIndex);
+                        setTimeout(() => {
+                            initializeCharts(clustersData[clusterIndex], clusterIndex);
+                        }, 100);
+                    } else {
+                        console.log('✅ Charts already exist for cluster:', clusterIndex);
+                    }
                 }
             }
         });
@@ -148,6 +159,7 @@ $(document).ready(function() {
     }
 
     function updateClustersData(clusters) {
+        // console.log('🔄 updateClustersData called with', clusters.length, 'clusters'); // Commented out to reduce noise
         clusters.forEach((cluster, index) => {
             const clusterDiv = $(`.cluster[data-cluster-index="${index}"]`);
             if (clusterDiv.length) {
@@ -167,13 +179,20 @@ $(document).ready(function() {
                 // Update table data
                 clusterDiv.find('.nodes-table-body').html(generateNodesTable(cluster.nodes));
                 clusterDiv.find('.buckets-table-body').html(generateBucketsTable(cluster.buckets));
-                clusterDiv.find('.system-stats').html(generateSystemStats(cluster.systemStats));
+                clusterDiv.find('.system-stats').html(generateSystemStats(cluster.systemStats, cluster));
 
-                // Update charts if the charts tab is active
+                // Update charts if the charts tab is active and charts exist
                 const activeTab = clusterDiv.find('.tabs').tabs('option', 'active');
                 const tabPanel = clusterDiv.find('.ui-tabs-panel').eq(activeTab);
                 if (tabPanel.attr('id').includes('charts')) {
-                    updateCharts(cluster, index);
+                    // Only update if charts exist for this cluster
+                    const chartExists = Object.keys(charts).some(key => key.includes(`-${index}`));
+                    if (chartExists) {
+                        // console.log('📊 Charts tab is active, updating charts for cluster:', index); // Commented out to reduce noise
+                        updateCharts(cluster, index);
+                    } else {
+                        console.log('⏭️ Charts tab active but no charts exist yet for cluster:', index);
+                    }
                 }
             }
         });
@@ -210,18 +229,33 @@ $(document).ready(function() {
         `).join('');
     }
 
-    function generateSystemStats(systemStats) {
+    function generateSystemStats(systemStats, cluster) {
         const formatValue = (key, value) => {
             if (typeof value !== 'number') return value;
             
-            // Memory-related stats (convert to MB or GB)
-            if (key.includes('mem') || key.includes('memory') || key.includes('swap')) {
-                if (value > 1024 * 1024 * 1024) {
+            // Memory and Disk-related stats (convert to appropriate units)
+            if (key.includes('mem') || key.includes('memory') || key.includes('swap') || 
+                key.includes('disk') || key.includes('storage') || key.includes('hdd')) {
+                
+                // For very large values (> 1TB), show in TB
+                if (value > 1024 * 1024 * 1024 * 1024) {
+                    return `${(value / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`;
+                }
+                // For large values (> 1GB), show in GB
+                else if (value > 1024 * 1024 * 1024) {
                     return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-                } else if (value > 1024 * 1024) {
+                }
+                // For medium values (> 1MB), show in MB
+                else if (value > 1024 * 1024) {
                     return `${(value / (1024 * 1024)).toFixed(2)} MB`;
-                } else {
-                    return `${value.toFixed(2)} bytes`;
+                }
+                // For small values (> 1KB), show in KB
+                else if (value > 1024) {
+                    return `${(value / 1024).toFixed(2)} KB`;
+                }
+                // For very small values, show in bytes
+                else {
+                    return `${value.toFixed(0)} bytes`;
                 }
             }
             
@@ -230,15 +264,142 @@ $(document).ready(function() {
                 return `${value.toFixed(2)}%`;
             }
             
+            // Time-related stats (convert seconds to appropriate units)
+            if (key.includes('time') && value > 60) {
+                const minutes = Math.floor(value / 60);
+                const seconds = (value % 60).toFixed(1);
+                return `${minutes}m ${seconds}s`;
+            }
+            
+            // Large numbers (add commas for readability)
+            if (value > 1000) {
+                return value.toLocaleString();
+            }
+            
             // Default formatting for other numeric values
             return value.toFixed(2);
         };
 
-        return Object.entries(systemStats).map(([key, value]) => `
-            <div class="col-md-6 mb-2">
-                <strong>${key.replace(/_/g, ' ').toUpperCase()}:</strong> ${formatValue(key, value)}
-            </div>
-        `).join('');
+        // Group stats by category
+        const cpuStats = {};
+        const memoryStats = {};
+        const diskStats = {};
+        const networkStats = {};
+        const otherStats = {};
+
+        // Categorize system stats
+        Object.entries(systemStats).forEach(([key, value]) => {
+            const lowerKey = key.toLowerCase();
+            if (lowerKey.includes('cpu')) {
+                cpuStats[key] = value;
+            } else if (lowerKey.includes('mem') || lowerKey.includes('swap') || lowerKey.includes('ram')) {
+                memoryStats[key] = value;
+            } else if (lowerKey.includes('disk') || lowerKey.includes('storage') || lowerKey.includes('hdd')) {
+                diskStats[key] = value;
+            } else if (lowerKey.includes('net') || lowerKey.includes('network')) {
+                networkStats[key] = value;
+            } else {
+                otherStats[key] = value;
+            }
+        });
+
+        // Add cluster-level storage stats if available
+        if (cluster && cluster.disk) {
+            diskStats['cluster_total_disk'] = cluster.disk.total * 1024 * 1024 * 1024; // Convert GB to bytes
+            diskStats['cluster_used_disk'] = cluster.disk.used * 1024 * 1024 * 1024;
+            diskStats['cluster_free_disk'] = cluster.disk.free * 1024 * 1024 * 1024;
+            diskStats['cluster_disk_utilization'] = ((cluster.disk.used / cluster.disk.total) * 100);
+        }
+
+        // Add cluster-level memory stats if available
+        if (cluster && cluster.memory) {
+            memoryStats['cluster_total_memory'] = cluster.memory.total * 1024 * 1024 * 1024;
+            memoryStats['cluster_used_memory'] = cluster.memory.used * 1024 * 1024 * 1024;
+            memoryStats['cluster_quota_memory'] = cluster.memory.quotaTotal * 1024 * 1024 * 1024;
+            memoryStats['cluster_memory_utilization'] = ((cluster.memory.used / cluster.memory.total) * 100);
+        }
+
+        // Add bucket-level storage and operational stats if available
+        if (cluster && cluster.buckets && cluster.buckets.length > 0) {
+            let totalItems = 0;
+            let totalOpsPerSec = 0;
+            let totalDiskFetches = 0;
+            let totalQuotaUsed = 0;
+            let bucketCount = 0;
+
+            cluster.buckets.forEach(bucket => {
+                if (bucket.basicStats) {
+                    totalItems += bucket.basicStats.itemCount || 0;
+                    totalOpsPerSec += bucket.opsPerSec || 0;
+                    totalDiskFetches += bucket.diskFetches || 0;
+                    totalQuotaUsed += bucket.quotaPercentUsed || 0;
+                    bucketCount++;
+                }
+            });
+
+            otherStats['total_buckets'] = bucketCount;
+            otherStats['total_items_across_buckets'] = totalItems;
+            otherStats['total_operations_per_sec'] = totalOpsPerSec;
+            otherStats['total_disk_fetches'] = totalDiskFetches;
+            otherStats['average_quota_utilization'] = bucketCount > 0 ? (totalQuotaUsed / bucketCount) : 0;
+        }
+
+        // Add node-level stats if available
+        if (cluster && cluster.nodes && cluster.nodes.length > 0) {
+            let totalCpuUtil = 0;
+            let totalMemoryTotal = 0;
+            let totalMemoryFree = 0;
+            let healthyNodes = 0;
+
+            cluster.nodes.forEach(node => {
+                totalCpuUtil += node.cpu_utilization || 0;
+                totalMemoryTotal += node.memory_total || 0;
+                totalMemoryFree += node.memory_free || 0;
+                if (node.status === 'healthy') healthyNodes++;
+            });
+
+            cpuStats['average_cpu_utilization_across_nodes'] = cluster.nodes.length > 0 ? (totalCpuUtil / cluster.nodes.length) : 0;
+            memoryStats['total_node_memory'] = totalMemoryTotal * 1024 * 1024 * 1024; // Convert GB to bytes
+            memoryStats['total_node_memory_free'] = totalMemoryFree * 1024 * 1024 * 1024;
+            memoryStats['node_memory_utilization'] = totalMemoryTotal > 0 ? (((totalMemoryTotal - totalMemoryFree) / totalMemoryTotal) * 100) : 0;
+            
+            otherStats['total_nodes'] = cluster.nodes.length;
+            otherStats['healthy_nodes'] = healthyNodes;
+            otherStats['node_health_percentage'] = cluster.nodes.length > 0 ? ((healthyNodes / cluster.nodes.length) * 100) : 0;
+        }
+
+        const generateSection = (title, stats, icon) => {
+            if (Object.keys(stats).length === 0) return '';
+            
+            const statsHtml = Object.entries(stats).map(([key, value]) => `
+                <div class="col-md-6 mb-2">
+                    <div class="stat-item">
+                        <strong>${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong>
+                        <span class="stat-value">${formatValue(key, value)}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            return `
+                <div class="stats-section">
+                    <h6 class="stats-section-title">
+                        <span class="stats-icon">${icon}</span>
+                        ${title}
+                    </h6>
+                    <div class="row">
+                        ${statsHtml}
+                    </div>
+                </div>
+            `;
+        };
+
+        return `
+            ${generateSection('CPU Performance', cpuStats, '🔧')}
+            ${generateSection('Memory Usage', memoryStats, '🧠')}
+            ${generateSection('Storage & Disk', diskStats, '💾')}
+            ${generateSection('Network', networkStats, '🌐')}
+            ${generateSection('Other Metrics', otherStats, '📊')}
+        `;
     }
 
     function generateChartsContainer(cluster, index) {
@@ -256,11 +417,28 @@ $(document).ready(function() {
                         ).join('')}
                     </select>
                 </div>
-                <div class="col-md-8">
+                <div class="col-md-4">
                     <div class="selected-bucket-info" id="bucket-info-${index}">
                         <h5 class="mb-0" id="bucket-title-${index}"></h5>
                         <small class="text-muted" id="bucket-details-${index}"></small>
                     </div>
+                </div>
+                <div class="col-md-3">
+                    <label>Chart Scale:</label>
+                    <div class="btn-group btn-group-toggle" data-toggle="buttons" id="scale-toggle-${index}">
+                        <label class="btn btn-outline-secondary btn-sm active">
+                            <input type="radio" name="scale-${index}" value="linear" checked> Linear
+                        </label>
+                        <label class="btn btn-outline-secondary btn-sm">
+                            <input type="radio" name="scale-${index}" value="logarithmic"> Logarithmic
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-1">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-outline-primary btn-sm btn-block refresh-charts" data-cluster-index="${index}">
+                        🔄 Refresh
+                    </button>
                 </div>
             </div>
             <div class="selected-bucket-charts" id="bucket-charts-${index}">
@@ -273,6 +451,14 @@ $(document).ready(function() {
                         </div>
                         <div class="col-md-6">
                             <canvas id="chart-ops-misses-${index}" width="400" height="200"></canvas>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <canvas id="chart-bg-operations-${index}" width="400" height="200"></canvas>
+                        </div>
+                        <div class="col-md-6">
+                            <!-- Empty for spacing -->
                         </div>
                     </div>
                 </div>
@@ -319,6 +505,48 @@ $(document).ready(function() {
                     </div>
                 </div>
 
+                <!-- vBucket Group -->
+                <div class="chart-group mt-4">
+                    <h6 class="chart-group-title">vBucket</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <canvas id="chart-dcp-operations-${index}" width="400" height="200"></canvas>
+                        </div>
+                        <div class="col-md-6">
+                            <canvas id="chart-dcp-backoff-${index}" width="400" height="200"></canvas>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <canvas id="chart-dcp-queue-${index}" width="400" height="200"></canvas>
+                        </div>
+                        <div class="col-md-6">
+                            <canvas id="chart-dcp-producer-${index}" width="400" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- XDCR Group -->
+                <div class="chart-group mt-4">
+                    <h6 class="chart-group-title">XDCR</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <canvas id="chart-xdcr-operations-${index}" width="400" height="200"></canvas>
+                        </div>
+                        <div class="col-md-6">
+                            <canvas id="chart-meta-operations-${index}" width="400" height="200"></canvas>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <canvas id="chart-xdcr-errors-${index}" width="400" height="200"></canvas>
+                        </div>
+                        <div class="col-md-6">
+                            <!-- Empty for spacing -->
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Other Group -->
                 <div class="chart-group mt-4">
                     <h6 class="chart-group-title">Other</h6>
@@ -337,21 +565,60 @@ $(document).ready(function() {
     }
 
     function initializeCharts(cluster, clusterIndex) {
-        if (!cluster.bucket_stats) return;
+        console.log('🎯 initializeCharts called for cluster:', clusterIndex, 'bucket_stats length:', cluster.bucket_stats?.length);
+        
+        if (!cluster.bucket_stats) {
+            console.log('❌ No bucket_stats found for cluster:', clusterIndex);
+            return;
+        }
+
+        // Check if already initialized to prevent duplicate initialization
+        if (window.chartsInitialized && window.chartsInitialized[clusterIndex]) {
+            console.log('⚠️ Charts already initialized for cluster:', clusterIndex);
+            return;
+        }
+
+        console.log('🔧 Setting up event handlers for cluster:', clusterIndex);
 
         // Initialize bucket selector change event
         $(`#bucket-select-${clusterIndex}`).off('change').on('change', function() {
             const selectedBucketIndex = parseInt($(this).val());
+            console.log('🔄 Bucket selector changed to:', selectedBucketIndex);
             loadBucketCharts(cluster, clusterIndex, selectedBucketIndex);
         });
 
+        // Initialize scale toggle change event
+        $(`#scale-toggle-${clusterIndex} input[type="radio"]`).off('change').on('change', function() {
+            const scaleType = $(this).val();
+            console.log('📏 Scale toggle changed to:', scaleType);
+            updateChartScales(clusterIndex, scaleType);
+        });
+
+        // Initialize refresh button event
+        $(`.refresh-charts[data-cluster-index="${clusterIndex}"]`).off('click').on('click', function() {
+            console.log('🔄 Manual refresh triggered for cluster:', clusterIndex);
+            updateCharts(clustersData[clusterIndex], clusterIndex);
+        });
+
+        // Enlarge functionality removed for simplicity
+
         // Load charts for the first bucket by default
+        console.log('📈 Loading bucket charts for cluster:', clusterIndex);
         loadBucketCharts(cluster, clusterIndex, 0);
+
+        // Mark as initialized
+        if (!window.chartsInitialized) {
+            window.chartsInitialized = {};
+        }
+        window.chartsInitialized[clusterIndex] = true;
+        console.log('✅ Charts initialized and marked for cluster:', clusterIndex);
     }
 
     function loadBucketCharts(cluster, clusterIndex, bucketIndex) {
+        console.log('📊 loadBucketCharts called for cluster:', clusterIndex, 'bucket:', bucketIndex);
         const bucketStat = cluster.bucket_stats[bucketIndex];
         if (!bucketStat || !bucketStat.stats || !bucketStat.stats.op || !bucketStat.stats.op.samples) {
+            console.log('❌ Invalid bucket stats for cluster:', clusterIndex, 'bucket:', bucketIndex);
             return;
         }
 
@@ -395,53 +662,69 @@ $(document).ready(function() {
                 data: cmd_gets,
                 borderColor: 'rgb(54, 162, 235)',
                 backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                tension: 0.1
+                tension: 0.1,
+                yAxisID: 'y'
             }, {
                 label: 'Cmd Sets',
                 data: cmd_sets,
                 borderColor: 'rgb(255, 193, 7)',
                 backgroundColor: 'rgba(255, 193, 7, 0.2)',
-                tension: 0.1
+                tension: 0.1,
+                yAxisID: 'y'
             }, {
                 label: 'Delete Hits',
                 data: delete_hits,
                 borderColor: 'rgb(244, 67, 54)',
                 backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                tension: 0.1
+                tension: 0.1,
+                yAxisID: 'y'
             }, {
                 label: 'CAS Hits',
                 data: cas_hits,
                 borderColor: 'rgb(156, 39, 176)',
                 backgroundColor: 'rgba(156, 39, 176, 0.2)',
-                tension: 0.1
+                tension: 0.1,
+                yAxisID: 'y'
             }, {
                 label: 'Lookup Hits',
                 data: lookup_hits,
                 borderColor: 'rgb(76, 175, 80)',
                 backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                tension: 0.1
+                tension: 0.1,
+                yAxisID: 'y'
             }, {
                 label: 'Increment Hits',
                 data: incr_hits,
                 borderColor: 'rgb(255, 152, 0)',
                 backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                tension: 0.1
+                tension: 0.1,
+                yAxisID: 'y'
             }, {
                 label: 'Decrement Hits',
                 data: decr_hits,
                 borderColor: 'rgb(103, 58, 183)',
                 backgroundColor: 'rgba(103, 58, 183, 0.2)',
-                tension: 0.1
+                tension: 0.1,
+                yAxisID: 'y'
             }, {
                 label: 'Total Ops',
                 data: total_ops,
                 borderColor: 'rgb(33, 150, 243)',
                 backgroundColor: 'rgba(33, 150, 243, 0.2)',
                 tension: 0.1,
-                borderWidth: 3
+                borderWidth: 3,
+                yAxisID: 'y'
+            }, {
+                label: 'Cache Miss Ratio (%)',
+                data: samples.ep_cache_miss_ratio || [],
+                borderColor: 'rgb(255, 87, 34)',
+                backgroundColor: 'rgba(255, 87, 34, 0.2)',
+                tension: 0.1,
+                yAxisID: 'y1'
             }]
         }, 'Operations - Hits/Commands', {
-            y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Operations/sec' } }
+            y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Operations/sec' } },
+            y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Cache Miss Ratio (%)' }, min: 0, max: 100, grid: { drawOnChartArea: false } }
         });
 
         // Operations - Misses
@@ -486,6 +769,36 @@ $(document).ready(function() {
             }]
         }, 'Operations - Misses');
 
+        // Background Operations 
+        createChart(`chart-bg-operations-${clusterIndex}`, {
+            labels: timeLabels,
+            datasets: [{
+                label: 'Background Fetches',
+                data: samples.ep_bg_fetched || [],
+                borderColor: 'rgb(33, 150, 243)',
+                backgroundColor: 'rgba(33, 150, 243, 0.2)',
+                tension: 0.1,
+                yAxisID: 'y'
+            }, {
+                label: 'Background Gets',
+                data: samples.ep_num_ops_get_meta || [],
+                borderColor: 'rgb(76, 175, 80)',
+                backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                tension: 0.1,
+                yAxisID: 'y'
+            }, {
+                label: 'Background Wait Time (s)',
+                data: samples.bg_wait_time || [],
+                borderColor: 'rgb(244, 67, 54)',
+                backgroundColor: 'rgba(244, 67, 54, 0.2)',
+                tension: 0.1,
+                yAxisID: 'y1'
+            }]
+        }, 'Background Operations', {
+            y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Operations/Items' } },
+            y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Wait Time (s)' }, grid: { drawOnChartArea: false } }
+        });
+
         // STATE GROUP
         // Memory State
         createChart(`chart-memory-state-${clusterIndex}`, {
@@ -509,13 +822,6 @@ $(document).ready(function() {
                 data: (samples.ep_mem_low_wat || []).map(val => (val / (1024 * 1024)).toFixed(2)),
                 borderColor: 'rgb(255, 152, 0)',
                 backgroundColor: 'rgba(255, 152, 0, 0.2)',
-                tension: 0.1,
-                yAxisID: 'y'
-            }, {
-                label: 'Swap Used (MB)',
-                data: (samples.swap_used || []).map(val => (val / (1024 * 1024)).toFixed(2)),
-                borderColor: 'rgb(244, 67, 54)',
-                backgroundColor: 'rgba(244, 67, 54, 0.2)',
                 tension: 0.1,
                 yAxisID: 'y'
             }]
@@ -552,24 +858,26 @@ $(document).ready(function() {
             labels: timeLabels,
             datasets: [{
                 label: 'Active Resident Ratio (%)',
-                data: (samples.vb_active_resident_items_ratio || []).map(val => (val * 100).toFixed(2)),
+                data: samples.vb_active_resident_items_ratio || [],
                 borderColor: 'rgb(76, 175, 80)',
                 backgroundColor: 'rgba(76, 175, 80, 0.2)',
                 tension: 0.1
             }, {
                 label: 'Replica Resident Ratio (%)',
-                data: (samples.vb_replica_resident_items_ratio || []).map(val => (val * 100).toFixed(2)),
+                data: samples.vb_replica_resident_items_ratio || [],
                 borderColor: 'rgb(255, 152, 0)',
                 backgroundColor: 'rgba(255, 152, 0, 0.2)',
                 tension: 0.1
             }, {
                 label: 'Pending Resident Ratio (%)',
-                data: (samples.vb_pending_resident_items_ratio || []).map(val => (val * 100).toFixed(2)),
+                data: samples.vb_pending_resident_items_ratio || [],
                 borderColor: 'rgb(244, 67, 54)',
                 backgroundColor: 'rgba(244, 67, 54, 0.2)',
                 tension: 0.1
             }]
-        }, 'Items in Memory Ratio');
+        }, 'Items in Memory Ratio', {
+            y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Percentage (%)' }, min: 0, max: 100 }
+        });
 
         // Connections & CPU
         createChart(`chart-connections-cpu-${clusterIndex}`, {
@@ -636,22 +944,15 @@ $(document).ready(function() {
         createChart(`chart-disk-commit-${clusterIndex}`, {
             labels: timeLabels,
             datasets: [{
-                label: 'Disk Write Queue',
+                label: 'Disk Write Queue Items',
                 data: samples.disk_write_queue || [],
                 borderColor: 'rgb(103, 58, 183)',
                 backgroundColor: 'rgba(103, 58, 183, 0.2)',
                 tension: 0.1,
                 yAxisID: 'y'
             }, {
-                label: 'Disk Updates',
-                data: samples.ep_diskqueue_items || [],
-                borderColor: 'rgb(63, 81, 181)',
-                backgroundColor: 'rgba(63, 81, 181, 0.2)',
-                tension: 0.1,
-                yAxisID: 'y'
-            }, {
-                label: 'Disk Commit Time (s)',
-                data: (samples.disk_commit_time || []).map(val => (val / 1000).toFixed(3)),
+                label: 'Avg Disk Commit Time (ms)',
+                data: (samples.avg_disk_commit_time || []).map(val => (val * 1000).toFixed(2)),
                 borderColor: 'rgb(244, 67, 54)',
                 backgroundColor: 'rgba(244, 67, 54, 0.2)',
                 tension: 0.1,
@@ -659,7 +960,7 @@ $(document).ready(function() {
             }]
         }, 'Disk Commit Operations', {
             y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Queue Items' } },
-            y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Time (s)' }, grid: { drawOnChartArea: false } }
+            y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Time (ms)' }, grid: { drawOnChartArea: false } }
         });
 
         // Disk Queue Active
@@ -681,7 +982,7 @@ $(document).ready(function() {
                 yAxisID: 'y'
             }, {
                 label: 'Active Queue Age (s)',
-                data: (samples.vb_active_queue_age || []).map(val => (val / 1000).toFixed(3)),
+                data: (samples.vb_active_queue_age || []).map(val => (val / 1000000000).toFixed(3)),
                 borderColor: 'rgb(255, 193, 7)',
                 backgroundColor: 'rgba(255, 193, 7, 0.2)',
                 tension: 0.1,
@@ -711,7 +1012,7 @@ $(document).ready(function() {
                 yAxisID: 'y'
             }, {
                 label: 'Replica Queue Age (s)',
-                data: (samples.vb_replica_queue_age || []).map(val => (val / 1000).toFixed(3)),
+                data: (samples.vb_replica_queue_age || []).map(val => (val / 1000000000).toFixed(3)),
                 borderColor: 'rgb(255, 193, 7)',
                 backgroundColor: 'rgba(255, 193, 7, 0.2)',
                 tension: 0.1,
@@ -770,14 +1071,193 @@ $(document).ready(function() {
                 tension: 0.1
             }]
         }, 'Other Statistics');
+
+        // VBUCKET GROUP
+        // DCP Operations
+        createChart(`chart-dcp-operations-${clusterIndex}`, {
+            labels: timeLabels,
+            datasets: [{
+                label: 'DCP 2i Items Remaining',
+                data: samples.ep_dcp_2i_items_remaining || [],
+                borderColor: 'rgb(76, 175, 80)',
+                backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'DCP 2i Items Sent',
+                data: samples.ep_dcp_2i_items_sent || [],
+                borderColor: 'rgb(255, 152, 0)',
+                backgroundColor: 'rgba(255, 152, 0, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'DCP 2i Total Bytes',
+                data: (samples.ep_dcp_2i_total_bytes || []).map(val => (val / (1024 * 1024)).toFixed(2)),
+                borderColor: 'rgb(54, 162, 235)',
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                tension: 0.1,
+                yAxisID: 'y1'
+            }]
+        }, 'DCP 2i Operations', {
+            y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Items' } },
+            y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Total Bytes (MB)' }, grid: { drawOnChartArea: false } }
+        });
+
+        // DCP Backoff
+        createChart(`chart-dcp-backoff-${clusterIndex}`, {
+            labels: timeLabels,
+            datasets: [{
+                label: 'DCP 2i Backoff',
+                data: samples.ep_dcp_2i_backoff || [],
+                borderColor: 'rgb(244, 67, 54)',
+                backgroundColor: 'rgba(244, 67, 54, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'DCP Other Backoff',
+                data: samples.ep_dcp_other_backoff || [],
+                borderColor: 'rgb(255, 99, 132)',
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'DCP Replica Backoff',
+                data: samples.ep_dcp_replica_backoff || [],
+                borderColor: 'rgb(255, 193, 7)',
+                backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'DCP Views Backoff',
+                data: samples.ep_dcp_views_backoff || [],
+                borderColor: 'rgb(156, 39, 176)',
+                backgroundColor: 'rgba(156, 39, 176, 0.2)',
+                tension: 0.1
+            }]
+        }, 'DCP Backoff Operations');
+
+        // DCP Queue
+        createChart(`chart-dcp-queue-${clusterIndex}`, {
+            labels: timeLabels,
+            datasets: [{
+                label: 'DCP Queue Fill',
+                data: samples.ep_dcp_queue_fill || [],
+                borderColor: 'rgb(33, 150, 243)',
+                backgroundColor: 'rgba(33, 150, 243, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'DCP Queue Drain',
+                data: samples.ep_dcp_queue_drain || [],
+                borderColor: 'rgb(76, 175, 80)',
+                backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'DCP Queue Size',
+                data: samples.ep_dcp_queue_size || [],
+                borderColor: 'rgb(255, 152, 0)',
+                backgroundColor: 'rgba(255, 152, 0, 0.2)',
+                tension: 0.1
+            }]
+        }, 'DCP Queue Operations');
+
+        // DCP Producer
+        createChart(`chart-dcp-producer-${clusterIndex}`, {
+            labels: timeLabels,
+            datasets: [{
+                label: 'DCP Producer Count',
+                data: samples.ep_dcp_producer_count || [],
+                borderColor: 'rgb(103, 58, 183)',
+                backgroundColor: 'rgba(103, 58, 183, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'DCP Replica Producer Count',
+                data: samples.ep_dcp_replica_producer_count || [],
+                borderColor: 'rgb(63, 81, 181)',
+                backgroundColor: 'rgba(63, 81, 181, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'DCP Other Producer Count',
+                data: samples.ep_dcp_other_producer_count || [],
+                borderColor: 'rgb(255, 87, 34)',
+                backgroundColor: 'rgba(255, 87, 34, 0.2)',
+                tension: 0.1
+            }]
+        }, 'DCP Producer Operations');
+
+        // XDCR GROUP
+        // XDCR Operations
+        createChart(`chart-xdcr-operations-${clusterIndex}`, {
+            labels: timeLabels,
+            datasets: [{
+                label: 'XDCR Operations',
+                data: samples.xdc_ops || [],
+                borderColor: 'rgb(76, 175, 80)',
+                backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'XDCR Optimistic Replication',
+                data: samples.replication_active_vbreps || [],
+                borderColor: 'rgb(33, 150, 243)',
+                backgroundColor: 'rgba(33, 150, 243, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'XDCR Waiting Vbreps',
+                data: samples.replication_waiting_vbreps || [],
+                borderColor: 'rgb(255, 152, 0)',
+                backgroundColor: 'rgba(255, 152, 0, 0.2)',
+                tension: 0.1
+            }]
+        }, 'XDCR Operations');
+
+        // Meta Operations (moved from Other)
+        createChart(`chart-meta-operations-${clusterIndex}`, {
+            labels: timeLabels,
+            datasets: [{
+                label: 'Get Meta Operations',
+                data: samples.ep_num_ops_get_meta || [],
+                borderColor: 'rgb(76, 175, 80)',
+                backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'Set Meta Operations',
+                data: samples.ep_num_ops_set_meta || [],
+                borderColor: 'rgb(255, 152, 0)',
+                backgroundColor: 'rgba(255, 152, 0, 0.2)',
+                tension: 0.1
+            }]
+        }, 'Meta Operations');
+
+        // XDCR Errors
+        createChart(`chart-xdcr-errors-${clusterIndex}`, {
+            labels: timeLabels,
+            datasets: [{
+                label: 'XDCR Checkpoints',
+                data: samples.replication_checkpoint_ops || [],
+                borderColor: 'rgb(244, 67, 54)',
+                backgroundColor: 'rgba(244, 67, 54, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'XDCR Rate Limit',
+                data: samples.replication_rate_limit || [],
+                borderColor: 'rgb(255, 99, 132)',
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'XDCR Errors',
+                data: samples.replication_errors || [],
+                borderColor: 'rgb(255, 193, 7)',
+                backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                tension: 0.1
+            }]
+        }, 'XDCR Errors & Status');
     }
 
     function createChart(canvasId, data, title, customScales) {
+        console.log('🎨 createChart called for:', canvasId);
         const ctx = document.getElementById(canvasId);
-        if (!ctx) return;
+        if (!ctx) {
+            console.log('❌ Canvas element not found:', canvasId);
+            return;
+        }
 
         const chartKey = canvasId;
         if (charts[chartKey]) {
+            console.log('🔄 Destroying existing chart:', chartKey);
             charts[chartKey].destroy();
         }
 
@@ -800,6 +1280,7 @@ $(document).ready(function() {
 
         const scales = customScales ? { ...defaultScales, ...customScales } : defaultScales;
 
+        console.log('🏗️ Creating new chart:', chartKey);
         charts[chartKey] = new Chart(ctx, {
             type: 'line',
             data: data,
@@ -824,13 +1305,67 @@ $(document).ready(function() {
                 }
             }
         });
+        console.log('✅ Chart created successfully:', chartKey);
     }
 
+    function updateChartScales(clusterIndex, scaleType) {
+        const chartKeys = [
+            `chart-ops-hits-${clusterIndex}`,
+            `chart-ops-misses-${clusterIndex}`,
+            `chart-bg-operations-${clusterIndex}`,
+            `chart-memory-state-${clusterIndex}`,
+            `chart-items-state-${clusterIndex}`,
+            `chart-resident-ratio-${clusterIndex}`,
+            `chart-connections-cpu-${clusterIndex}`,
+            `chart-disk-size-${clusterIndex}`,
+            `chart-disk-commit-${clusterIndex}`,
+            `chart-disk-queue-active-${clusterIndex}`,
+            `chart-disk-queue-replica-${clusterIndex}`,
+            `chart-dcp-operations-${clusterIndex}`,
+            `chart-dcp-backoff-${clusterIndex}`,
+            `chart-dcp-queue-${clusterIndex}`,
+            `chart-dcp-producer-${clusterIndex}`,
+            `chart-xdcr-operations-${clusterIndex}`,
+            `chart-meta-operations-${clusterIndex}`,
+            `chart-xdcr-errors-${clusterIndex}`,
+            `chart-other-metrics-${clusterIndex}`,
+            `chart-other-stats-${clusterIndex}`
+        ];
+
+        chartKeys.forEach(key => {
+            if (charts[key]) {
+                const chart = charts[key];
+                Object.keys(chart.options.scales).forEach(scaleKey => {
+                    if (scaleKey === 'x') return; // Don't change time axis
+                    chart.options.scales[scaleKey].type = scaleType;
+                });
+                chart.update('none');
+            }
+        });
+    }
+
+    // Enlarge functionality removed for simplicity
+
     function updateCharts(cluster, clusterIndex) {
-        if (!cluster.bucket_stats) return;
+        console.log('🔄 updateCharts called for cluster:', clusterIndex);
+        
+        // Throttle updates to prevent too frequent calls
+        const now = Date.now();
+        const lastUpdate = window.lastChartUpdate = window.lastChartUpdate || {};
+        if (lastUpdate[clusterIndex] && (now - lastUpdate[clusterIndex]) < 2000) { // 2 second throttle
+            console.log('⏭️ Throttling chart update for cluster:', clusterIndex);
+            return;
+        }
+        lastUpdate[clusterIndex] = now;
+        
+        if (!cluster.bucket_stats) {
+            console.log('❌ No bucket_stats in updateCharts for cluster:', clusterIndex);
+            return;
+        }
 
         // Get currently selected bucket
         const selectedBucketIndex = parseInt($(`#bucket-select-${clusterIndex}`).val()) || 0;
+        console.log('📈 Updating charts for bucket index:', selectedBucketIndex);
         const bucketStat = cluster.bucket_stats[selectedBucketIndex];
         
         if (!bucketStat || !bucketStat.stats || !bucketStat.stats.op || !bucketStat.stats.op.samples) {
@@ -853,6 +1388,7 @@ $(document).ready(function() {
         const chartKeys = [
             `chart-ops-hits-${clusterIndex}`,
             `chart-ops-misses-${clusterIndex}`,
+            `chart-bg-operations-${clusterIndex}`,
             `chart-memory-state-${clusterIndex}`,
             `chart-items-state-${clusterIndex}`,
             `chart-resident-ratio-${clusterIndex}`,
@@ -861,12 +1397,26 @@ $(document).ready(function() {
             `chart-disk-commit-${clusterIndex}`,
             `chart-disk-queue-active-${clusterIndex}`,
             `chart-disk-queue-replica-${clusterIndex}`,
+            `chart-dcp-operations-${clusterIndex}`,
+            `chart-dcp-backoff-${clusterIndex}`,
+            `chart-dcp-queue-${clusterIndex}`,
+            `chart-dcp-producer-${clusterIndex}`,
+            `chart-xdcr-operations-${clusterIndex}`,
+            `chart-meta-operations-${clusterIndex}`,
+            `chart-xdcr-errors-${clusterIndex}`,
             `chart-other-metrics-${clusterIndex}`,
             `chart-other-stats-${clusterIndex}`
         ];
 
         chartKeys.forEach(key => {
             if (charts[key]) {
+                // Skip update if chart is being rendered to avoid conflicts
+                if (charts[key].updating) {
+                    console.log('⏭️ Skipping update for chart currently being rendered:', key);
+                    return;
+                }
+                
+                charts[key].updating = true;
                 charts[key].data.labels = timeLabels;
                 
                 if (key.includes('ops-hits')) {
@@ -891,6 +1441,7 @@ $(document).ready(function() {
                     charts[key].data.datasets[5].data = incr_hits;
                     charts[key].data.datasets[6].data = decr_hits;
                     charts[key].data.datasets[7].data = total_ops;
+                    charts[key].data.datasets[8].data = samples.ep_cache_miss_ratio || [];
                 } else if (key.includes('ops-misses')) {
                     charts[key].data.datasets[0].data = samples.get_misses || [];
                     charts[key].data.datasets[1].data = samples.delete_misses || [];
@@ -898,19 +1449,22 @@ $(document).ready(function() {
                     charts[key].data.datasets[3].data = samples.lookup_misses || [];
                     charts[key].data.datasets[4].data = samples.incr_misses || [];
                     charts[key].data.datasets[5].data = samples.decr_misses || [];
+                } else if (key.includes('bg-operations')) {
+                    charts[key].data.datasets[0].data = samples.ep_bg_fetched || [];
+                    charts[key].data.datasets[1].data = samples.ep_num_ops_get_meta || [];
+                    charts[key].data.datasets[2].data = samples.bg_wait_time || [];
                 } else if (key.includes('memory-state')) {
                     charts[key].data.datasets[0].data = (samples.mem_used || []).map(val => (val / (1024 * 1024)).toFixed(2));
                     charts[key].data.datasets[1].data = (samples.ep_mem_high_wat || []).map(val => (val / (1024 * 1024)).toFixed(2));
                     charts[key].data.datasets[2].data = (samples.ep_mem_low_wat || []).map(val => (val / (1024 * 1024)).toFixed(2));
-                    charts[key].data.datasets[3].data = (samples.swap_used || []).map(val => (val / (1024 * 1024)).toFixed(2));
                 } else if (key.includes('items-state')) {
                     charts[key].data.datasets[0].data = samples.curr_items || [];
                     charts[key].data.datasets[1].data = (samples.ep_meta || []).map(val => (val / (1024 * 1024)).toFixed(2));
                     charts[key].data.datasets[2].data = samples.vb_active_curr_items || [];
                 } else if (key.includes('resident-ratio')) {
-                    charts[key].data.datasets[0].data = (samples.vb_active_resident_items_ratio || []).map(val => (val * 100).toFixed(2));
-                    charts[key].data.datasets[1].data = (samples.vb_replica_resident_items_ratio || []).map(val => (val * 100).toFixed(2));
-                    charts[key].data.datasets[2].data = (samples.vb_pending_resident_items_ratio || []).map(val => (val * 100).toFixed(2));
+                    charts[key].data.datasets[0].data = samples.vb_active_resident_items_ratio || [];
+                    charts[key].data.datasets[1].data = samples.vb_replica_resident_items_ratio || [];
+                    charts[key].data.datasets[2].data = samples.vb_pending_resident_items_ratio || [];
                 } else if (key.includes('connections-cpu')) {
                     charts[key].data.datasets[0].data = samples.curr_connections || [];
                     charts[key].data.datasets[1].data = samples.cpu_utilization_rate || [];
@@ -921,16 +1475,15 @@ $(document).ready(function() {
                     charts[key].data.datasets[2].data = samples.couch_docs_fragmentation || [];
                 } else if (key.includes('disk-commit')) {
                     charts[key].data.datasets[0].data = samples.disk_write_queue || [];
-                    charts[key].data.datasets[1].data = samples.ep_diskqueue_items || [];
-                    charts[key].data.datasets[2].data = (samples.disk_commit_time || []).map(val => (val / 1000).toFixed(3));
+                    charts[key].data.datasets[1].data = (samples.avg_disk_commit_time || []).map(val => (val * 1000).toFixed(2));
                 } else if (key.includes('disk-queue-active')) {
                     charts[key].data.datasets[0].data = samples.vb_active_queue_fill || [];
                     charts[key].data.datasets[1].data = samples.vb_active_queue_drain || [];
-                    charts[key].data.datasets[2].data = (samples.vb_active_queue_age || []).map(val => (val / 1000).toFixed(3));
+                    charts[key].data.datasets[2].data = (samples.vb_active_queue_age || []).map(val => (val / 1000000000).toFixed(3));
                 } else if (key.includes('disk-queue-replica')) {
                     charts[key].data.datasets[0].data = samples.vb_replica_queue_fill || [];
                     charts[key].data.datasets[1].data = samples.vb_replica_queue_drain || [];
-                    charts[key].data.datasets[2].data = (samples.vb_replica_queue_age || []).map(val => (val / 1000).toFixed(3));
+                    charts[key].data.datasets[2].data = (samples.vb_replica_queue_age || []).map(val => (val / 1000000000).toFixed(3));
                 } else if (key.includes('other-metrics')) {
                     charts[key].data.datasets[0].data = samples.vb_active_num || [];
                     charts[key].data.datasets[1].data = samples.vb_replica_num || [];
@@ -939,9 +1492,39 @@ $(document).ready(function() {
                     charts[key].data.datasets[0].data = samples.ep_total_cache_size || [];
                     charts[key].data.datasets[1].data = samples.auth_errors || [];
                     charts[key].data.datasets[2].data = samples.ep_tmp_oom_errors || [];
+                } else if (key.includes('dcp-operations')) {
+                    charts[key].data.datasets[0].data = samples.ep_dcp_2i_items_remaining || [];
+                    charts[key].data.datasets[1].data = samples.ep_dcp_2i_items_sent || [];
+                    charts[key].data.datasets[2].data = (samples.ep_dcp_2i_total_bytes || []).map(val => (val / (1024 * 1024)).toFixed(2));
+                } else if (key.includes('dcp-backoff')) {
+                    charts[key].data.datasets[0].data = samples.ep_dcp_2i_backoff || [];
+                    charts[key].data.datasets[1].data = samples.ep_dcp_other_backoff || [];
+                    charts[key].data.datasets[2].data = samples.ep_dcp_replica_backoff || [];
+                    charts[key].data.datasets[3].data = samples.ep_dcp_views_backoff || [];
+                } else if (key.includes('dcp-queue')) {
+                    charts[key].data.datasets[0].data = samples.ep_dcp_queue_fill || [];
+                    charts[key].data.datasets[1].data = samples.ep_dcp_queue_drain || [];
+                    charts[key].data.datasets[2].data = samples.ep_dcp_queue_size || [];
+                } else if (key.includes('dcp-producer')) {
+                    charts[key].data.datasets[0].data = samples.ep_dcp_producer_count || [];
+                    charts[key].data.datasets[1].data = samples.ep_dcp_replica_producer_count || [];
+                    charts[key].data.datasets[2].data = samples.ep_dcp_other_producer_count || [];
+                } else if (key.includes('xdcr-operations')) {
+                    charts[key].data.datasets[0].data = samples.xdc_ops || [];
+                    charts[key].data.datasets[1].data = samples.replication_active_vbreps || [];
+                    charts[key].data.datasets[2].data = samples.replication_waiting_vbreps || [];
+                } else if (key.includes('meta-operations')) {
+                    charts[key].data.datasets[0].data = samples.ep_num_ops_get_meta || [];
+                    charts[key].data.datasets[1].data = samples.ep_num_ops_set_meta || [];
+                } else if (key.includes('xdcr-errors')) {
+                    charts[key].data.datasets[0].data = samples.replication_checkpoint_ops || [];
+                    charts[key].data.datasets[1].data = samples.replication_rate_limit || [];
+                    charts[key].data.datasets[2].data = samples.replication_errors || [];
                 }
                 
+                // Use 'none' mode to prevent animations and reduce visual disruption
                 charts[key].update('none');
+                charts[key].updating = false;
             }
         });
     }
