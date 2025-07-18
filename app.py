@@ -811,7 +811,7 @@ def initialize_app():
 
 if __name__ == "__main__":
     import sys
-    
+
     # Initialize application
     config_data = initialize_app()
 
@@ -821,12 +821,12 @@ if __name__ == "__main__":
     # Parse command line arguments
     port = 5001
     debug = True
-    
+
     # Check if we're running as a PyInstaller executable
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         # Running as PyInstaller executable - disable debug mode
         debug = False
-        
+
     # Parse command line arguments for port
     if len(sys.argv) > 1:
         for i, arg in enumerate(sys.argv):
