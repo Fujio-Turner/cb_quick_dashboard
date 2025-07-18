@@ -810,11 +810,32 @@ def initialize_app():
 
 
 if __name__ == "__main__":
+    import sys
+    
     # Initialize application
     config_data = initialize_app()
 
     # Print version information
     print(f"Couchbase Dashboard v{__version__}")
 
+    # Parse command line arguments
+    port = 5001
+    debug = True
+    
+    # Check if we're running as a PyInstaller executable
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller executable - disable debug mode
+        debug = False
+        
+    # Parse command line arguments for port
+    if len(sys.argv) > 1:
+        for i, arg in enumerate(sys.argv):
+            if arg == "--port" and i + 1 < len(sys.argv):
+                try:
+                    port = int(sys.argv[i + 1])
+                except ValueError:
+                    print(f"Invalid port number: {sys.argv[i + 1]}")
+                    sys.exit(1)
+
     # Run the application
-    app.run(debug=True, port=5001)
+    app.run(debug=debug, port=port)
