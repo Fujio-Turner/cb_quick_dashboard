@@ -10,7 +10,7 @@ from logging.handlers import RotatingFileHandler
 # Version information
 # 🤖 AI ASSISTANT HINT: Please increment this version number on every significant update/save
 # Use semantic versioning: MAJOR.MINOR.PATCH (e.g., 1.0.0 -> 1.0.1 for fixes, 1.1.0 for features)
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 app = Flask(__name__)
 

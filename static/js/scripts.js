@@ -109,7 +109,7 @@ $(document).ready(function() {
                                                 </tr>
                                             </thead>
                                             <tbody class="nodes-table-body">
-                                                ${generateNodesTable(cluster.nodes)}
+                                                ${generateNodesTable(cluster.nodes, cluster.host)}
                                             </tbody>
                                         </table>
                                     </div>
@@ -219,7 +219,7 @@ $(document).ready(function() {
                     (Free: ${cluster.disk.free.toFixed(2)} GB)`);
 
                 // Update table data
-                clusterDiv.find('.nodes-table-body').html(generateNodesTable(cluster.nodes));
+                clusterDiv.find('.nodes-table-body').html(generateNodesTable(cluster.nodes, cluster.host));
                 clusterDiv.find('.buckets-table-body').html(generateBucketsTable(cluster.buckets));
                 // console.log('🔄 Updating system stats for cluster:', index);
                 // console.log('⚠️  WARNING: About to replace system-stats HTML - this may destroy existing charts!');
@@ -255,10 +255,33 @@ $(document).ready(function() {
         });
     }
 
-    function generateNodesTable(nodes) {
+    function generateNodesTable(nodes, clusterHost) {
+        // Extract protocol and port from cluster host URL
+        let protocol = 'http';
+        let port = '8091';
+        
+        if (clusterHost) {
+            try {
+                const url = new URL(clusterHost);
+                protocol = url.protocol.replace(':', '');
+                
+                // Map common secure ports to their web console equivalents
+                if (url.port === '18091') {
+                    port = '18091'; // Secure web console port
+                } else if (url.port === '8091') {
+                    port = '8091'; // Standard web console port
+                } else if (url.port) {
+                    port = url.port; // Use whatever port is specified
+                }
+            } catch (e) {
+                // If URL parsing fails, use defaults
+                console.warn('Could not parse cluster host URL:', clusterHost);
+            }
+        }
+        
         return nodes.map(node => `
             <tr>
-                <td><a href="http://${node.hostname}:8091" target="_blank">${node.hostname}</a></td>
+                <td><a href="${protocol}://${node.hostname}:${port}" target="_blank">${node.hostname}</a></td>
                 <td><span class="badge badge-${node.status === 'healthy' ? 'success' : 'danger'}">${node.status}</span></td>
                 <td><small>${node.services.join(', ')}</small></td>
                 <td>${node.cpu_utilization.toFixed(1)}%</td>
