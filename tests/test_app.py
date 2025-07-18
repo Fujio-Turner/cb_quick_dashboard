@@ -1,8 +1,14 @@
 import pytest
 import asyncio
 import json
+import sys
+import os
 from unittest.mock import Mock, patch, AsyncMock
 import aiohttp
+
+# Add the parent directory to the path so we can import app
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app import (
     fetch_cluster_data,
     fetch_bucket_data,
@@ -83,6 +89,34 @@ class TestFetchBucketData:
         assert result["bucket_name"] == "test-bucket"
         assert result["data"] == {"bucketType": "membase"}
         assert result["error"] is None
+    
+    @pytest.mark.asyncio
+    async def test_fetch_bucket_data_http_error(self):
+        """Test bucket data fetch with HTTP error"""
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.status = 404
+        
+        mock_session.get.return_value.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_session.get.return_value.__aexit__ = AsyncMock(return_value=None)
+        
+        result = await fetch_bucket_data(mock_session, "http://localhost:8091", "test-bucket", "admin", "password")
+        
+        assert result["bucket_name"] == "test-bucket"
+        assert result["data"] is None
+        assert "Failed with status 404" in result["error"]
+    
+    @pytest.mark.asyncio
+    async def test_fetch_bucket_data_exception(self):
+        """Test bucket data fetch with network exception"""
+        mock_session = Mock()
+        mock_session.get.side_effect = Exception("Network error")
+        
+        result = await fetch_bucket_data(mock_session, "http://localhost:8091", "test-bucket", "admin", "password")
+        
+        assert result["bucket_name"] == "test-bucket"
+        assert result["data"] is None
+        assert result["error"] == "Network error"
 
 
 class TestFetchBucketStats:
@@ -104,6 +138,34 @@ class TestFetchBucketStats:
         assert result["bucket_name"] == "test-bucket"
         assert result["stats"]["op"]["samples"]["timestamp"] == [123456789]
         assert result["error"] is None
+    
+    @pytest.mark.asyncio
+    async def test_fetch_bucket_stats_http_error(self):
+        """Test bucket stats fetch with HTTP error"""
+        mock_session = Mock()
+        mock_response = Mock()
+        mock_response.status = 403
+        
+        mock_session.get.return_value.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_session.get.return_value.__aexit__ = AsyncMock(return_value=None)
+        
+        result = await fetch_bucket_stats(mock_session, "http://localhost:8091", "test-bucket", "admin", "password")
+        
+        assert result["bucket_name"] == "test-bucket"
+        assert result["stats"] is None
+        assert "Failed with status 403" in result["error"]
+    
+    @pytest.mark.asyncio
+    async def test_fetch_bucket_stats_exception(self):
+        """Test bucket stats fetch with network exception"""
+        mock_session = Mock()
+        mock_session.get.side_effect = Exception("Timeout error")
+        
+        result = await fetch_bucket_stats(mock_session, "http://localhost:8091", "test-bucket", "admin", "password")
+        
+        assert result["bucket_name"] == "test-bucket"
+        assert result["stats"] is None
+        assert result["error"] == "Timeout error"
 
 
 class TestCreateNotWatchingResult:

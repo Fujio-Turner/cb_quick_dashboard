@@ -64,6 +64,24 @@ async def fetch_bucket_stats(session, host, bucket_name, user, password):
         logger.error(f"Error fetching bucket stats from {url}: {str(e)}")
         return {"bucket_name": bucket_name, "stats": None, "error": str(e)}
 
+async def fetch_index_status(session, host, user, password):
+    """Fetch index status data from /indexStatus endpoint."""
+    url = f"{host}/indexStatus"
+    try:
+        async with session.get(url, auth=aiohttp.BasicAuth(user, password), timeout=10) as response:
+            if response.status == 200:
+                data = await response.json()
+                return {"host": host, "data": data, "error": None}
+            else:
+                return {
+                    "host": host,
+                    "data": None,
+                    "error": f"Failed with status {response.status}"
+                }
+    except Exception as e:
+        logger.error(f"Error fetching index status from {url}: {str(e)}")
+        return {"host": host, "data": None, "error": str(e)}
+
 async def get_all_clusters_data(clusters):
     """Fetch data from all clusters and their buckets asynchronously with timeout handling."""
     async with aiohttp.ClientSession() as session:
@@ -246,11 +264,18 @@ def process_cluster_data(clusters_data):
                         "error": bucket_stat["error"]
                     })
             
+            # Extract cluster UUID from buckets URI if available
+            cluster_uuid = data.get("uuid", "Unknown")
+            if cluster_uuid == "Unknown" and "buckets" in data and "uri" in data["buckets"]:
+                buckets_uri = data["buckets"]["uri"]
+                if "uuid=" in buckets_uri:
+                    cluster_uuid = buckets_uri.split("uuid=")[1].split("&")[0]
+            
             cluster_info = {
                 "host": cluster["host"],
                 "customName": cluster.get("customName"),
                 "clusterName": data.get("clusterName", "Unknown"),
-                "clusterUUID": data.get("uuid", "Unknown"),
+                "clusterUUID": cluster_uuid,
                 "health": all(node["status"] == "healthy" for node in data.get("nodes", [])),
                 "memory": {
                     "total": data.get("storageTotals", {}).get("ram", {}).get("total", 0) / (1024**3),
@@ -270,6 +295,7 @@ def process_cluster_data(clusters_data):
                         "cpu_utilization": node.get("systemStats", {}).get("cpu_utilization_rate", 0),
                         "memory_total": node.get("memoryTotal", 0) / (1024**3),
                         "memory_free": node.get("memoryFree", 0) / (1024**3),
+                        "version": node.get("version", "Unknown"),
                     }
                     for node in data.get("nodes", [])
                 ],
@@ -344,5 +370,63 @@ def get_bucket_stats(cluster_host, bucket_name):
         logger.error(f"Error in get_bucket_stats: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/indexStatus")
+def get_index_status():
+    """API endpoint to get index status from all clusters."""
+    try:
+        clusters = load_config()
+        if not clusters:
+            return jsonify({"error": "No clusters configured"}), 500
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        async def fetch_all_index_status():
+            results = []
+            async with aiohttp.ClientSession() as session:
+                tasks = []
+                for cluster in clusters:
+                    if cluster.get("watch", True):
+                        task = fetch_index_status(session, cluster["host"], cluster["user"], cluster["pass"])
+                        tasks.append(task)
+                
+                index_results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                cluster_index = 0
+                for i, result in enumerate(index_results):
+                    # Find the corresponding cluster that was watched
+                    while cluster_index < len(clusters) and not clusters[cluster_index].get("watch", True):
+                        cluster_index += 1
+                    
+                    if cluster_index >= len(clusters):
+                        break
+                        
+                    if isinstance(result, Exception):
+                        logger.error(f"Error fetching index status: {str(result)}")
+                        results.append({
+                            "host": clusters[cluster_index]["host"],
+                            "customName": clusters[cluster_index].get("customName"),
+                            "data": None,
+                            "error": str(result)
+                        })
+                    else:
+                        results.append({
+                            "host": result["host"],
+                            "customName": clusters[cluster_index].get("customName"),
+                            "data": result["data"],
+                            "error": result["error"]
+                        })
+                    
+                    cluster_index += 1
+            
+            return results
+        
+        result = loop.run_until_complete(fetch_all_index_status())
+        loop.close()
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in get_index_status: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5001)

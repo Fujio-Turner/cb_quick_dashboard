@@ -6,7 +6,13 @@ Tests the full application workflow end-to-end
 import pytest
 import json
 import asyncio
+import sys
+import os
 from unittest.mock import patch, Mock, AsyncMock
+
+# Add the parent directory to the path so we can import app
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app import app, get_all_clusters_data, process_cluster_data
 
 
@@ -299,12 +305,14 @@ class TestConfigurationHandling:
     
     def test_load_test_config(self):
         """Test loading the test configuration file"""
+        # First load the actual test config to see what we expect
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.test.json')
+        with open(config_path, 'r') as f:
+            test_config = json.load(f)
+        
+        # Now test the load_config function with mocked file operations
         with patch('builtins.open', create=True) as mock_open:
             with patch('json.load') as mock_json:
-                # Load test config
-                with open('config.test.json', 'r') as f:
-                    test_config = json.load(f)
-                
                 mock_json.return_value = test_config
                 
                 from app import load_config

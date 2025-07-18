@@ -4,7 +4,7 @@
         "user": "Administrator",
         "pass": "password",
         "customName": "Local Dev",
-        "watch":false
+        "watch":true
     },
     {
         "host": "http://2.2.2.2:8091",

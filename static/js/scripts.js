@@ -90,8 +90,9 @@ $(document).ready(function() {
                                 <ul>
                                     <li><a href="#tabs-nodes-${index}">Nodes (${cluster.nodes.length})</a></li>
                                     <li><a href="#tabs-buckets-${index}">Buckets (${cluster.buckets.length})</a></li>
-                                    <li><a href="#tabs-stats-${index}">Stats</a></li>
+                                    <li><a href="#tabs-stats-${index}">Cluster Stats</a></li>
                                     <li><a href="#tabs-charts-${index}">Data Charts</a></li>
+                                    <li><a href="#tabs-index-${index}">Indexes</a></li>
                                 </ul>
                                 <div id="tabs-nodes-${index}">
                                     <div class="table-responsive">
@@ -104,6 +105,7 @@ $(document).ready(function() {
                                                     <th>CPU %</th>
                                                     <th>Memory Total (GB)</th>
                                                     <th>Memory Free (GB)</th>
+                                                    <th>Version</th>
                                                 </tr>
                                             </thead>
                                             <tbody class="nodes-table-body">
@@ -137,13 +139,18 @@ $(document).ready(function() {
                                     </div>
                                 </div>
                                 <div id="tabs-stats-${index}">
-                                    <div class="system-stats">
-                                        ${generateSystemStats(cluster.systemStats, cluster)}
-                                    </div>
+                                <div class="system-stats">
+                                ${generateSystemStats(cluster.systemStats, cluster, index)}
+                                </div>
                                 </div>
                                 <div id="tabs-charts-${index}">
                                     <div class="charts-container">
                                         ${generateChartsContainer(cluster, index)}
+                                    </div>
+                                </div>
+                                <div id="tabs-index-${index}">
+                                    <div class="index-charts-container">
+                                        ${generateIndexChartsContainer(cluster, index)}
                                     </div>
                                 </div>
                             </div>
@@ -162,7 +169,7 @@ $(document).ready(function() {
                 
                 console.log('🔄 Tab activated:', tabId, 'clusterIndex:', clusterIndex);
                 
-                if (tabId.includes('charts')) {
+                if (tabId.includes('charts') && !tabId.includes('index')) {
                     // Check if charts are already initialized for this cluster
                     const chartExists = Object.keys(charts).some(key => key.includes(`-${clusterIndex}`));
                     console.log('📊 Charts tab activated - chartExists:', chartExists, 'existing charts:', Object.keys(charts).filter(key => key.includes(`-${clusterIndex}`)));
@@ -175,6 +182,16 @@ $(document).ready(function() {
                     } else {
                         console.log('✅ Charts already exist for cluster:', clusterIndex);
                     }
+                } else if (tabId.includes('stats')) {
+                    console.log('📊 Stats tab activated for cluster:', clusterIndex);
+                    setTimeout(() => {
+                        initializeSystemStatsCharts(clustersData[clusterIndex], clusterIndex);
+                    }, 100);
+                } else if (tabId.includes('index')) {
+                    console.log('🗂️ Indexes tab activated for cluster:', clusterIndex);
+                    setTimeout(() => {
+                        initializeIndexCharts(clustersData[clusterIndex], clusterIndex);
+                    }, 100);
                 }
             }
         });
@@ -204,12 +221,27 @@ $(document).ready(function() {
                 // Update table data
                 clusterDiv.find('.nodes-table-body').html(generateNodesTable(cluster.nodes));
                 clusterDiv.find('.buckets-table-body').html(generateBucketsTable(cluster.buckets));
-                clusterDiv.find('.system-stats').html(generateSystemStats(cluster.systemStats, cluster));
-
-                // Update charts if the charts tab is active and charts exist
+                // console.log('🔄 Updating system stats for cluster:', index);
+                // console.log('⚠️  WARNING: About to replace system-stats HTML - this may destroy existing charts!');
+                
+                // Check if we're currently on the stats tab
                 const activeTab = clusterDiv.find('.tabs').tabs('option', 'active');
                 const tabPanel = clusterDiv.find('.ui-tabs-panel').eq(activeTab);
-                if (tabPanel.attr('id').includes('charts')) {
+                const tabId = tabPanel.attr('id');
+                const isStatsTabActive = tabId && tabId.includes('stats');
+                
+                // console.log('📊 Stats tab active?', isStatsTabActive, 'for cluster:', index);
+                
+                if (isStatsTabActive) {
+                    // console.log('🛑 Skipping system stats HTML update to preserve charts for cluster:', index);
+                    // Skip updating the system-stats HTML to preserve existing charts
+                } else {
+                    // console.log('✅ Updating system stats HTML for cluster:', index);
+                    clusterDiv.find('.system-stats').html(generateSystemStats(cluster.systemStats, cluster, index));
+                }
+
+                // Update charts if the charts tab is active and charts exist
+                if (tabId && tabId.includes('charts')) {
                     // Only update if charts exist for this cluster
                     const chartExists = Object.keys(charts).some(key => key.includes(`-${index}`));
                     if (chartExists) {
@@ -232,6 +264,7 @@ $(document).ready(function() {
                 <td>${node.cpu_utilization.toFixed(1)}%</td>
                 <td>${node.memory_total.toFixed(2)}</td>
                 <td>${node.memory_free.toFixed(2)}</td>
+                <td><small>${node.version || 'Unknown'}</small></td>
             </tr>
         `).join('');
     }
@@ -254,7 +287,7 @@ $(document).ready(function() {
         `).join('');
     }
 
-    function generateSystemStats(systemStats, cluster) {
+    function generateSystemStats(systemStats, cluster, clusterIndex) {
         const formatValue = (key, value) => {
             if (typeof value !== 'number') return value;
             
@@ -393,38 +426,682 @@ $(document).ready(function() {
             otherStats['node_health_percentage'] = cluster.nodes.length > 0 ? ((healthyNodes / cluster.nodes.length) * 100) : 0;
         }
 
-        const generateSection = (title, stats, icon) => {
+        const generateSection = (title, stats, icon, clusterIndex) => {
             if (Object.keys(stats).length === 0) return '';
             
-            const statsHtml = Object.entries(stats).map(([key, value]) => `
-                <div class="col-md-6 mb-2">
-                    <div class="stat-item">
-                        <strong>${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong>
-                        <span class="stat-value">${formatValue(key, value)}</span>
-                    </div>
-                </div>
-            `).join('');
+            // Create visual charts for specific metrics
+            const generateChartSection = (title, stats, icon, clusterIndex) => {
+                if (title === 'CPU Performance') {
+                    const cpuUtilization = stats['average_cpu_utilization_across_nodes'] || 0;
+                    const singleCpuUtil = stats['cpu_utilization_rate'] || 0;
+                    const primaryCpuValue = cpuUtilization > 0 ? cpuUtilization : singleCpuUtil;
+                    
+                    return `
+                        <div class="stats-section">
+                            <h6 class="stats-section-title">
+                                <span class="stats-icon">${icon}</span>
+                                ${title}
+                            </h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="chart-container">
+                                        <canvas id="cpu-gauge-${clusterIndex}" width="200" height="200"></canvas>
+                                        <div class="chart-title">CPU Usage</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="stats-list">
+                                        ${Object.entries(stats).map(([key, value]) => `
+                                            <div class="stat-item">
+                                                <strong>${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong>
+                                                <span class="stat-value">${formatValue(key, value)}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else if (title === 'Memory Usage') {
+                    const memoryUtilization = stats['cluster_memory_utilization'] || stats['node_memory_utilization'] || 0;
+                    const totalMemory = stats['cluster_total_memory'] || stats['total_node_memory'] || 0;
+                    const usedMemory = stats['cluster_used_memory'] || (stats['total_node_memory'] - stats['total_node_memory_free']) || 0;
+                    
+                    // Calculate additional memory stats for charts
+                    const memLimit = stats['mem_limit'] || 0;
+                    const memFree = stats['mem_free'] || 0;
+                    const memTotal = stats['mem_total'] || 0;
+                    const swapTotal = stats['swap_total'] || 0;
+                    const swapUsed = stats['swap_used'] || 0;
+                    const swapUtilization = swapTotal > 0 ? (swapUsed / swapTotal) * 100 : 0;
+                    
+                    return `
+                        <div class="stats-section">
+                            <h6 class="stats-section-title">
+                                <span class="stats-icon">${icon}</span>
+                                ${title}
+                            </h6>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="chart-container">
+                                        <canvas id="memory-donut-${clusterIndex}" width="200" height="200"></canvas>
+                                        <div class="chart-title">Memory Usage</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="chart-container">
+                                        <canvas id="memory-limit-donut-${clusterIndex}" width="200" height="200"></canvas>
+                                        <div class="chart-title">Memory Limit</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="chart-container">
+                                        <canvas id="swap-donut-${clusterIndex}" width="200" height="200"></canvas>
+                                        <div class="chart-title">Swap Usage</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else if (title === 'Storage & Disk') {
+                    const diskUtilization = stats['cluster_disk_utilization'] || 0;
+                    const totalDisk = stats['cluster_total_disk'] || 0;
+                    const usedDisk = stats['cluster_used_disk'] || 0;
+                    
+                    return `
+                        <div class="stats-section">
+                            <h6 class="stats-section-title">
+                                <span class="stats-icon">${icon}</span>
+                                ${title}
+                            </h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="chart-container">
+                                        <canvas id="disk-bar-${clusterIndex}" width="200" height="200"></canvas>
+                                        <div class="chart-title">Disk Usage</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="stats-list">
+                                        ${Object.entries(stats).map(([key, value]) => `
+                                            <div class="stat-item">
+                                                <strong>${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong>
+                                                <span class="stat-value">${formatValue(key, value)}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else if (title === 'Other Metrics') {
+                    // Create charts for node health, bucket stats, etc.
+                    const nodeHealthPercentage = stats['node_health_percentage'] || 0;
+                    const avgQuotaUtilization = stats['average_quota_utilization'] || 0;
+                    const totalNodes = stats['total_nodes'] || 0;
+                    const healthyNodes = stats['healthy_nodes'] || 0;
+                    const totalBuckets = stats['total_buckets'] || 0;
+                    
+                    return `
+                        <div class="stats-section">
+                            <h6 class="stats-section-title">
+                                <span class="stats-icon">${icon}</span>
+                                ${title}
+                            </h6>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="chart-container">
+                                        <canvas id="node-health-donut-${clusterIndex}" width="200" height="200"></canvas>
+                                        <div class="chart-title">Node Health</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="chart-container">
+                                        <canvas id="quota-donut-${clusterIndex}" width="200" height="200"></canvas>
+                                        <div class="chart-title">Bucket Quota Usage</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="stats-list">
+                                        ${Object.entries(stats).filter(([key, value]) => 
+                                            !['node_health_percentage', 'average_quota_utilization'].includes(key)
+                                        ).map(([key, value]) => `
+                                            <div class="stat-item">
+                                                <strong>${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong>
+                                                <span class="stat-value">${formatValue(key, value)}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // Default layout for other sections
+                    const statsHtml = Object.entries(stats).map(([key, value]) => `
+                        <div class="col-md-6 mb-2">
+                            <div class="stat-item">
+                                <strong>${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong>
+                                <span class="stat-value">${formatValue(key, value)}</span>
+                            </div>
+                        </div>
+                    `).join('');
 
-            return `
-                <div class="stats-section">
-                    <h6 class="stats-section-title">
-                        <span class="stats-icon">${icon}</span>
-                        ${title}
-                    </h6>
-                    <div class="row">
-                        ${statsHtml}
-                    </div>
-                </div>
-            `;
+                    return `
+                        <div class="stats-section">
+                            <h6 class="stats-section-title">
+                                <span class="stats-icon">${icon}</span>
+                                ${title}
+                            </h6>
+                            <div class="row">
+                                ${statsHtml}
+                            </div>
+                        </div>
+                    `;
+                }
+            };
+            
+            return generateChartSection(title, stats, icon, clusterIndex);
         };
 
         return `
-            ${generateSection('CPU Performance', cpuStats, '🔧')}
-            ${generateSection('Memory Usage', memoryStats, '🧠')}
-            ${generateSection('Storage & Disk', diskStats, '💾')}
-            ${generateSection('Network', networkStats, '🌐')}
-            ${generateSection('Other Metrics', otherStats, '📊')}
+            ${generateSection('CPU Performance', cpuStats, '🔧', clusterIndex)}
+            ${generateSection('Memory Usage', memoryStats, '🧠', clusterIndex)}
+            ${generateSection('Storage & Disk', diskStats, '💾', clusterIndex)}
+            ${generateSection('Network', networkStats, '🌐', clusterIndex)}
+            ${generateSection('Other Metrics', otherStats, '📊', clusterIndex)}
         `;
+    }
+
+    // Function to initialize system stats charts
+    function initializeSystemStatsCharts(cluster, clusterIndex) {
+        // console.log('🚀 Initializing system stats charts for cluster:', clusterIndex);
+        // console.log('📊 Cluster data:', cluster);
+        
+        // CPU Gauge Chart
+        const cpuStats = {};
+        const memoryStats = {};
+        const diskStats = {};
+        
+        // Categorize system stats (same logic as in generateSystemStats)
+        Object.entries(cluster.systemStats || {}).forEach(([key, value]) => {
+            const lowerKey = key.toLowerCase();
+            if (lowerKey.includes('cpu')) {
+                cpuStats[key] = value;
+            } else if (lowerKey.includes('mem') || lowerKey.includes('swap') || lowerKey.includes('ram')) {
+                memoryStats[key] = value;
+            } else if (lowerKey.includes('disk') || lowerKey.includes('storage') || lowerKey.includes('hdd')) {
+                diskStats[key] = value;
+            }
+        });
+
+        // Add cluster-level stats
+        if (cluster.memory) {
+            memoryStats['cluster_total_memory'] = cluster.memory.total * 1024 * 1024 * 1024;
+            memoryStats['cluster_used_memory'] = cluster.memory.used * 1024 * 1024 * 1024;
+            memoryStats['cluster_memory_utilization'] = ((cluster.memory.used / cluster.memory.total) * 100);
+        }
+
+        if (cluster.disk) {
+            diskStats['cluster_total_disk'] = cluster.disk.total * 1024 * 1024 * 1024;
+            diskStats['cluster_used_disk'] = cluster.disk.used * 1024 * 1024 * 1024;
+            diskStats['cluster_disk_utilization'] = ((cluster.disk.used / cluster.disk.total) * 100);
+        }
+
+        // Add node-level CPU stats
+        if (cluster.nodes && cluster.nodes.length > 0) {
+            let totalCpuUtil = 0;
+            cluster.nodes.forEach(node => {
+                totalCpuUtil += node.cpu_utilization || 0;
+            });
+            cpuStats['average_cpu_utilization_across_nodes'] = cluster.nodes.length > 0 ? (totalCpuUtil / cluster.nodes.length) : 0;
+        }
+
+        // Create CPU Horizontal Bar Chart
+        const cpuUtilization = cpuStats['average_cpu_utilization_across_nodes'] || cpuStats['cpu_utilization_rate'] || 0;
+        // console.log('🖥️ CPU Utilization:', cpuUtilization, 'for cluster:', clusterIndex);
+        const cpuCanvas = document.getElementById(`cpu-gauge-${clusterIndex}`);
+        // console.log('🎯 CPU Canvas element:', cpuCanvas);
+        if (cpuCanvas) {
+            // console.log('✅ Creating CPU chart for cluster:', clusterIndex);
+            const cpuCtx = cpuCanvas.getContext('2d');
+            const cpuChart = new Chart(cpuCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['CPU Usage'],
+                    datasets: [{
+                        label: 'Used',
+                        data: [cpuUtilization],
+                        backgroundColor: cpuUtilization > 80 ? '#dc3545' : cpuUtilization > 60 ? '#ffc107' : '#28a745',
+                        borderWidth: 1
+                    }, {
+                        label: 'Free',
+                        data: [100 - cpuUtilization],
+                        backgroundColor: '#e9ecef',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    scales: {
+                        x: {
+                            stacked: true,
+                            min: 0,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        y: {
+                            stacked: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.parsed.x.toFixed(1) + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            // console.log('🎊 CPU chart created successfully for cluster:', clusterIndex);
+        } else {
+            // console.log('❌ CPU canvas not found for cluster:', clusterIndex);
+        }
+
+        // Create Memory Donut Chart
+        const memoryUtilization = memoryStats['cluster_memory_utilization'] || memoryStats['node_memory_utilization'] || 0;
+        const memoryCanvas = document.getElementById(`memory-donut-${clusterIndex}`);
+        if (memoryCanvas) {
+            const memoryCtx = memoryCanvas.getContext('2d');
+            new Chart(memoryCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Used', 'Free'],
+                    datasets: [{
+                        data: [memoryUtilization, 100 - memoryUtilization],
+                        backgroundColor: [
+                            memoryUtilization > 80 ? '#dc3545' : memoryUtilization > 60 ? '#ffc107' : '#17a2b8',
+                            '#e9ecef'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + context.parsed.toFixed(1) + '%';
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [{
+                    beforeDraw: function(chart) {
+                        const width = chart.width;
+                        const height = chart.height;
+                        const ctx = chart.ctx;
+                        
+                        ctx.restore();
+                        const fontSize = (height / 140).toFixed(2);
+                        ctx.font = fontSize + "em sans-serif";
+                        ctx.textBaseline = "middle";
+                        ctx.fillStyle = "#000";
+                        
+                        const text = `${memoryUtilization.toFixed(1)}%`;
+                        const textX = Math.round((width - ctx.measureText(text).width) / 2);
+                        const textY = height / 2;
+                        
+                        ctx.fillText(text, textX, textY);
+                        ctx.save();
+                    }
+                }]
+            });
+        }
+
+        // Create Memory Limit Donut Chart
+        const memLimit = memoryStats['mem_limit'] || 0;
+        const memFree = memoryStats['mem_free'] || 0;
+        const memTotal = memoryStats['mem_total'] || 0;
+        const memLimitUtilization = memLimit > 0 ? ((memLimit - memFree) / memLimit) * 100 : 0;
+        const memLimitCanvas = document.getElementById(`memory-limit-donut-${clusterIndex}`);
+        if (memLimitCanvas) {
+            const memLimitCtx = memLimitCanvas.getContext('2d');
+            new Chart(memLimitCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Used', 'Free'],
+                    datasets: [{
+                        data: [memLimitUtilization, 100 - memLimitUtilization],
+                        backgroundColor: [
+                            memLimitUtilization > 80 ? '#dc3545' : memLimitUtilization > 60 ? '#ffc107' : '#28a745',
+                            '#e9ecef'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + context.parsed.toFixed(1) + '%';
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [{
+                    beforeDraw: function(chart) {
+                        const width = chart.width;
+                        const height = chart.height;
+                        const ctx = chart.ctx;
+                        
+                        ctx.restore();
+                        const fontSize = (height / 140).toFixed(2);
+                        ctx.font = fontSize + "em sans-serif";
+                        ctx.textBaseline = "middle";
+                        ctx.fillStyle = "#000";
+                        
+                        const text = `${memLimitUtilization.toFixed(1)}%`;
+                        const textX = Math.round((width - ctx.measureText(text).width) / 2);
+                        const textY = height / 2;
+                        
+                        ctx.fillText(text, textX, textY);
+                        ctx.save();
+                    }
+                }]
+            });
+        }
+
+        // Create Swap Usage Donut Chart
+        const swapTotal = memoryStats['swap_total'] || 0;
+        const swapUsed = memoryStats['swap_used'] || 0;
+        const swapUtilization = swapTotal > 0 ? (swapUsed / swapTotal) * 100 : 0;
+        const swapCanvas = document.getElementById(`swap-donut-${clusterIndex}`);
+        if (swapCanvas) {
+            const swapCtx = swapCanvas.getContext('2d');
+            new Chart(swapCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Used', 'Free'],
+                    datasets: [{
+                        data: swapTotal > 0 ? [swapUtilization, 100 - swapUtilization] : [0, 100],
+                        backgroundColor: [
+                            swapUtilization > 80 ? '#dc3545' : swapUtilization > 60 ? '#ffc107' : '#6f42c1',
+                            '#e9ecef'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return swapTotal > 0 ? context.label + ': ' + context.parsed.toFixed(1) + '%' : 'No swap configured';
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [{
+                    beforeDraw: function(chart) {
+                        const width = chart.width;
+                        const height = chart.height;
+                        const ctx = chart.ctx;
+                        
+                        ctx.restore();
+                        const fontSize = (height / 140).toFixed(2);
+                        ctx.font = fontSize + "em sans-serif";
+                        ctx.textBaseline = "middle";
+                        ctx.fillStyle = "#000";
+                        
+                        const text = swapTotal > 0 ? `${swapUtilization.toFixed(1)}%` : 'No Swap';
+                        const textX = Math.round((width - ctx.measureText(text).width) / 2);
+                        const textY = height / 2;
+                        
+                        ctx.fillText(text, textX, textY);
+                        ctx.save();
+                    }
+                }]
+            });
+        }
+
+        // Create Disk Horizontal Bar Chart
+        const diskUtilization = diskStats['cluster_disk_utilization'] || 0;
+        const diskCanvas = document.getElementById(`disk-bar-${clusterIndex}`);
+        if (diskCanvas) {
+            const diskCtx = diskCanvas.getContext('2d');
+            new Chart(diskCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Disk Usage'],
+                    datasets: [{
+                        label: 'Used',
+                        data: [diskUtilization],
+                        backgroundColor: diskUtilization > 80 ? '#dc3545' : diskUtilization > 60 ? '#ffc107' : '#6f42c1',
+                        borderWidth: 1
+                    }, {
+                        label: 'Free',
+                        data: [100 - diskUtilization],
+                        backgroundColor: '#e9ecef',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    scales: {
+                        x: {
+                            stacked: true,
+                            min: 0,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        y: {
+                            stacked: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.parsed.x.toFixed(1) + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Create Node Health Donut Chart
+        const nodeHealthPercentage = cluster.nodes && cluster.nodes.length > 0 ? 
+            ((cluster.nodes.filter(node => node.status === 'healthy').length / cluster.nodes.length) * 100) : 0;
+        const nodeHealthCanvas = document.getElementById(`node-health-donut-${clusterIndex}`);
+        if (nodeHealthCanvas) {
+            const nodeHealthCtx = nodeHealthCanvas.getContext('2d');
+            new Chart(nodeHealthCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Healthy', 'Unhealthy'],
+                    datasets: [{
+                        data: [nodeHealthPercentage, 100 - nodeHealthPercentage],
+                        backgroundColor: [
+                            nodeHealthPercentage > 80 ? '#28a745' : nodeHealthPercentage > 60 ? '#ffc107' : '#dc3545',
+                            '#e9ecef'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + context.parsed.toFixed(1) + '%';
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [{
+                    beforeDraw: function(chart) {
+                        const width = chart.width;
+                        const height = chart.height;
+                        const ctx = chart.ctx;
+                        
+                        ctx.restore();
+                        const fontSize = (height / 140).toFixed(2);
+                        ctx.font = fontSize + "em sans-serif";
+                        ctx.textBaseline = "middle";
+                        ctx.fillStyle = "#000";
+                        
+                        const text = `${nodeHealthPercentage.toFixed(1)}%`;
+                        const textX = Math.round((width - ctx.measureText(text).width) / 2);
+                        const textY = height / 2;
+                        
+                        ctx.fillText(text, textX, textY);
+                        ctx.save();
+                    }
+                }]
+            });
+        }
+
+        // Create Bucket Quota Usage Donut Chart
+        let avgQuotaUtilization = 0;
+        if (cluster.buckets && cluster.buckets.length > 0) {
+            let totalQuotaUsed = 0;
+            cluster.buckets.forEach(bucket => {
+                totalQuotaUsed += bucket.quotaPercentUsed || 0;
+            });
+            avgQuotaUtilization = totalQuotaUsed / cluster.buckets.length;
+        }
+        const quotaCanvas = document.getElementById(`quota-donut-${clusterIndex}`);
+        if (quotaCanvas) {
+            const quotaCtx = quotaCanvas.getContext('2d');
+            new Chart(quotaCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Used', 'Free'],
+                    datasets: [{
+                        data: [avgQuotaUtilization, 100 - avgQuotaUtilization],
+                        backgroundColor: [
+                            avgQuotaUtilization > 80 ? '#dc3545' : avgQuotaUtilization > 60 ? '#ffc107' : '#20c997',
+                            '#e9ecef'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + context.parsed.toFixed(1) + '%';
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [{
+                    beforeDraw: function(chart) {
+                        const width = chart.width;
+                        const height = chart.height;
+                        const ctx = chart.ctx;
+                        
+                        ctx.restore();
+                        const fontSize = (height / 140).toFixed(2);
+                        ctx.font = fontSize + "em sans-serif";
+                        ctx.textBaseline = "middle";
+                        ctx.fillStyle = "#000";
+                        
+                        const text = `${avgQuotaUtilization.toFixed(1)}%`;
+                        const textX = Math.round((width - ctx.measureText(text).width) / 2);
+                        const textY = height / 2;
+                        
+                        ctx.fillText(text, textX, textY);
+                        ctx.save();
+                    }
+                }]
+            });
+        }
     }
 
     function generateChartsContainer(cluster, index) {
@@ -1623,4 +2300,478 @@ $(document).ready(function() {
 
     // Poll every 10 seconds
     setInterval(fetchClusters, 10000);
+
+    // Index Charts functionality
+    let indexData = {};
+    let indexChartsInitialized = {};
+
+    function generateIndexChartsContainer(cluster, index) {
+        return `
+            <div class="index-charts-content" id="index-charts-${index}">
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <label for="bucket-filter-${index}">Bucket:</label>
+                        <select id="bucket-filter-${index}" class="form-control">
+                            <option value="(All)">(All)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="scope-filter-${index}">Scope:</label>
+                        <select id="scope-filter-${index}" class="form-control">
+                            <option value="(All)">(All)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="collection-filter-${index}">Collection:</label>
+                        <select id="collection-filter-${index}" class="form-control">
+                            <option value="(All)">(All)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="view-by-${index}">View By:</label>
+                        <select id="view-by-${index}" class="form-control">
+                            <option value="Name">Name</option>
+                            <option value="Server">Server</option>
+                            <option value="No Replicas">No Replicas</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="index-display-area" id="index-display-${index}">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="sr-only">Loading...</span>
+                        </div>
+                        <p>Loading index data...</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function initializeIndexCharts(cluster, clusterIndex) {
+        if (indexChartsInitialized[clusterIndex]) {
+            console.log('🗂️ Index charts already initialized for cluster:', clusterIndex);
+            return;
+        }
+
+        console.log('🗂️ Initializing index charts for cluster:', clusterIndex);
+        
+        // Fetch index data
+        fetchIndexData(cluster, clusterIndex);
+        
+        // Set up event handlers
+        setupIndexEventHandlers(clusterIndex);
+        
+        indexChartsInitialized[clusterIndex] = true;
+    }
+
+    function fetchIndexData(cluster, clusterIndex) {
+        $.ajax({
+            url: '/api/indexStatus',
+            method: 'GET',
+            success: function(data) {
+                console.log('📊 Index data fetched:', data);
+                // Filter data to only show the current cluster
+                const currentClusterData = data.find(clusterData => 
+                    clusterData.host === cluster.host || 
+                    clusterData.customName === cluster.customName
+                );
+                
+                if (currentClusterData) {
+                    indexData[clusterIndex] = [currentClusterData]; // Make it an array for consistency
+                } else {
+                    indexData[clusterIndex] = [];
+                }
+                
+                processIndexData(clusterIndex);
+            },
+            error: function(xhr, status, error) {
+                console.error('Error fetching index data:', error);
+                $(`#index-display-${clusterIndex}`).html('<div class="alert alert-danger">Error fetching index data: ' + error + '</div>');
+            }
+        });
+    }
+
+    function processIndexData(clusterIndex) {
+        const data = indexData[clusterIndex];
+        if (!data || data.length === 0) {
+            $(`#index-display-${clusterIndex}`).html('<div class="alert alert-info">No index data available.</div>');
+            return;
+        }
+
+        let allIndexes = [];
+        let buckets = new Set();
+        let scopes = new Set();
+        let collections = new Set();
+        let servers = new Set();
+
+        // Process data from all clusters
+        data.forEach(cluster => {
+            if (cluster.data && cluster.data.indexes) {
+                cluster.data.indexes.forEach(index => {
+                    buckets.add(index.bucket);
+                    scopes.add(index.scope);
+                    collections.add(index.collection);
+                    index.hosts.forEach(host => servers.add(host));
+                    
+                    // Add server and cluster info to index
+                    index.clusterName = cluster.customName || cluster.host;
+                    index.serverHost = index.hosts[0]; // Primary host
+                    allIndexes.push(index);
+                });
+            }
+        });
+
+        // Populate filter dropdowns
+        populateFilterDropdowns(clusterIndex, buckets, scopes, collections);
+        
+        // Store processed data
+        indexData[clusterIndex].processedIndexes = allIndexes;
+        indexData[clusterIndex].buckets = Array.from(buckets);
+        indexData[clusterIndex].scopes = Array.from(scopes);
+        indexData[clusterIndex].collections = Array.from(collections);
+        indexData[clusterIndex].servers = Array.from(servers);
+        
+        // Display indexes
+        displayIndexes(clusterIndex, allIndexes);
+        
+        // Update tab title with index count
+        updateIndexTabTitle(clusterIndex, allIndexes.length);
+    }
+
+    function updateIndexTabTitle(clusterIndex, count) {
+        const tabLink = $(`a[href="#tabs-index-${clusterIndex}"]`);
+        tabLink.text(`Indexes (${count})`);
+    }
+
+    function populateFilterDropdowns(clusterIndex, buckets, scopes, collections) {
+        const bucketSelect = $(`#bucket-filter-${clusterIndex}`);
+        const scopeSelect = $(`#scope-filter-${clusterIndex}`);
+        const collectionSelect = $(`#collection-filter-${clusterIndex}`);
+        
+        // Clear existing options (except "All")
+        bucketSelect.find('option:not([value="(All)"])').remove();
+        scopeSelect.find('option:not([value="(All)"])').remove();
+        collectionSelect.find('option:not([value="(All)"])').remove();
+        
+        // Add bucket options
+        Array.from(buckets).sort().forEach(bucket => {
+            bucketSelect.append(`<option value="${bucket}">${bucket}</option>`);
+        });
+        
+        // Add scope options
+        Array.from(scopes).sort().forEach(scope => {
+            scopeSelect.append(`<option value="${scope}">${scope}</option>`);
+        });
+        
+        // Add collection options
+        Array.from(collections).sort().forEach(collection => {
+            collectionSelect.append(`<option value="${collection}">${collection}</option>`);
+        });
+    }
+
+    function setupIndexEventHandlers(clusterIndex) {
+        // Filter change handlers
+        $(`#bucket-filter-${clusterIndex}, #scope-filter-${clusterIndex}, #collection-filter-${clusterIndex}, #view-by-${clusterIndex}`).on('change', function() {
+            filterAndDisplayIndexes(clusterIndex);
+        });
+        
+        // Cascading filter logic
+        $(`#bucket-filter-${clusterIndex}`).on('change', function() {
+            updateCascadingFilters(clusterIndex, 'bucket');
+        });
+        
+        $(`#scope-filter-${clusterIndex}`).on('change', function() {
+            updateCascadingFilters(clusterIndex, 'scope');
+        });
+    }
+
+    function updateCascadingFilters(clusterIndex, changedFilter) {
+        const data = indexData[clusterIndex];
+        if (!data || !data.processedIndexes) return;
+        
+        const bucketFilter = $(`#bucket-filter-${clusterIndex}`).val();
+        const scopeFilter = $(`#scope-filter-${clusterIndex}`).val();
+        
+        let filteredIndexes = data.processedIndexes;
+        
+        // Apply bucket filter
+        if (bucketFilter !== '(All)') {
+            filteredIndexes = filteredIndexes.filter(index => index.bucket === bucketFilter);
+        }
+        
+        // Update scope dropdown based on bucket selection
+        if (changedFilter === 'bucket') {
+            const availableScopes = new Set();
+            filteredIndexes.forEach(index => availableScopes.add(index.scope));
+            
+            const scopeSelect = $(`#scope-filter-${clusterIndex}`);
+            const currentScope = scopeSelect.val();
+            scopeSelect.find('option:not([value="(All)"])').remove();
+            
+            Array.from(availableScopes).sort().forEach(scope => {
+                scopeSelect.append(`<option value="${scope}">${scope}</option>`);
+            });
+            
+            // Restore selection if still valid
+            if (availableScopes.has(currentScope)) {
+                scopeSelect.val(currentScope);
+            }
+        }
+        
+        // Apply scope filter
+        if (scopeFilter !== '(All)') {
+            filteredIndexes = filteredIndexes.filter(index => index.scope === scopeFilter);
+        }
+        
+        // Update collection dropdown based on bucket and scope selection
+        const availableCollections = new Set();
+        filteredIndexes.forEach(index => availableCollections.add(index.collection));
+        
+        const collectionSelect = $(`#collection-filter-${clusterIndex}`);
+        const currentCollection = collectionSelect.val();
+        collectionSelect.find('option:not([value="(All)"])').remove();
+        
+        Array.from(availableCollections).sort().forEach(collection => {
+            collectionSelect.append(`<option value="${collection}">${collection}</option>`);
+        });
+        
+        // Restore selection if still valid
+        if (availableCollections.has(currentCollection)) {
+            collectionSelect.val(currentCollection);
+        }
+    }
+
+    function filterAndDisplayIndexes(clusterIndex) {
+        const data = indexData[clusterIndex];
+        if (!data || !data.processedIndexes) return;
+        
+        const bucketFilter = $(`#bucket-filter-${clusterIndex}`).val();
+        const scopeFilter = $(`#scope-filter-${clusterIndex}`).val();
+        const collectionFilter = $(`#collection-filter-${clusterIndex}`).val();
+        const viewBy = $(`#view-by-${clusterIndex}`).val();
+        
+        let filteredIndexes = data.processedIndexes;
+        
+        // Apply filters
+        if (bucketFilter !== '(All)') {
+            filteredIndexes = filteredIndexes.filter(index => index.bucket === bucketFilter);
+        }
+        if (scopeFilter !== '(All)') {
+            filteredIndexes = filteredIndexes.filter(index => index.scope === scopeFilter);
+        }
+        if (collectionFilter !== '(All)') {
+            filteredIndexes = filteredIndexes.filter(index => index.collection === collectionFilter);
+        }
+        
+        // Apply view by filter
+        if (viewBy === 'No Replicas') {
+            filteredIndexes = filteredIndexes.filter(index => index.numReplica === 0);
+        }
+        
+        displayIndexes(clusterIndex, filteredIndexes, viewBy);
+        
+        // Update tab title with filtered count
+        updateIndexTabTitle(clusterIndex, filteredIndexes.length);
+    }
+
+    function displayIndexes(clusterIndex, indexes, viewBy = 'Name') {
+        const displayArea = $(`#index-display-${clusterIndex}`);
+        
+        if (indexes.length === 0) {
+            displayArea.html('<div class="alert alert-info">No indexes match the selected filters.</div>');
+            return;
+        }
+        
+        let html = '';
+        
+        if (viewBy === 'Server') {
+            // Group by server
+            const serverGroups = {};
+            indexes.forEach(index => {
+                const server = index.serverHost;
+                if (!serverGroups[server]) {
+                    serverGroups[server] = [];
+                }
+                serverGroups[server].push(index);
+            });
+            
+            Object.keys(serverGroups).sort().forEach(server => {
+                html += `<div class="server-group mb-4">
+                    <h5 class="server-group-title bg-light p-2"><i class="fas fa-server"></i> ${server}</h5>
+                    <div class="indexes-grid">
+                        ${generateIndexCards(serverGroups[server])}
+                    </div>
+                </div>`;
+            });
+        } else {
+            // Sort by name
+            indexes.sort((a, b) => a.indexName.localeCompare(b.indexName));
+            html = `<div class="indexes-grid">${generateIndexCards(indexes)}</div>`;
+        }
+        
+        displayArea.html(html);
+    }
+
+    function formatLastScanTime(lastScanTime) {
+        if (!lastScanTime || lastScanTime === 'NA' || lastScanTime === 'N/A') {
+            return '';
+        }
+        
+        try {
+            const scanDate = new Date(lastScanTime);
+            const now = new Date();
+            const diffMs = now - scanDate;
+            const diffSeconds = Math.floor(diffMs / 1000);
+            const diffMinutes = Math.floor(diffSeconds / 60);
+            const diffHours = Math.floor(diffMinutes / 60);
+            const diffDays = Math.floor(diffHours / 24);
+            const diffWeeks = Math.floor(diffDays / 7);
+            const diffMonths = Math.floor(diffDays / 30);
+            
+            let relativeTime = '';
+            if (diffMonths > 0) {
+                relativeTime = `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
+            } else if (diffWeeks > 0) {
+                relativeTime = `${diffWeeks} week${diffWeeks > 1 ? 's' : ''} ago`;
+            } else if (diffDays > 0) {
+                relativeTime = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+            } else if (diffHours > 0) {
+                relativeTime = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+            } else if (diffMinutes > 0) {
+                relativeTime = `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`;
+            } else {
+                relativeTime = 'Just now';
+            }
+            
+            const formattedDate = scanDate.toLocaleString();
+            return `${formattedDate} (${relativeTime})`;
+        } catch (e) {
+            return lastScanTime;
+        }
+    }
+
+    function generateIndexCards(indexes) {
+        return indexes.map((index, cardIndex) => {
+            const isReplica = index.replicaId > 0;
+            const replicaFlag = isReplica ? '<span class="badge badge-secondary ml-2">Replica</span>' : '';
+            const statusColor = index.status === 'Ready' ? 'success' : (index.status === 'Created' ? 'warning' : 'danger');
+            const lastScanFormatted = formatLastScanTime(index.lastScanTime);
+            const cardId = `index-card-${Date.now()}-${cardIndex}`;
+            
+            // Check for defer_build in the definition
+            const deferBuild = index.definition && index.definition.includes('"defer_build":true') ? 
+                '<span class="badge badge-warning ml-2">Defer Build</span>' : '';
+            
+            // Check for no replica
+            const noReplica = index.numReplica === 0 ? 
+                '<span class="badge badge-danger ml-2">No Replica</span>' : '';
+            
+            // Check if index is primary (make background red)
+            const isPrimary = index.indexName === '#primary';
+            const cardClass = isPrimary ? 'index-card card mb-3 bg-danger text-white' : 'index-card card mb-3';
+            
+            return `
+                <div class="${cardClass}">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="card-title mb-1">
+                                    ${index.indexName}${replicaFlag}
+                                </h6>
+                                <p class="card-text small text-muted mb-2">
+                                    ${index.bucket}.${index.scope}.${index.collection}
+                                </p>
+                            </div>
+                            <div class="text-right">
+                                <span class="badge badge-${statusColor}">${index.status}</span>
+                                <br>
+                                <small class="text-muted">${index.progress}%</small>
+                            </div>
+                        </div>
+                        
+                        <div class="index-stats row mt-2">
+                            <div class="col-md-12">
+                                <small><strong>Replicas:</strong> ${index.numReplica}${deferBuild}${noReplica}</small>
+                            </div>
+                        </div>
+                        
+                        <div class="index-stats row mt-1">
+                            ${lastScanFormatted ? `
+                            <div class="col-md-12">
+                                <small><strong>Last Scan:</strong> ${lastScanFormatted}</small>
+                            </div>
+                            ` : ''}
+                            <div class="col-md-12 mt-1">
+                                <small><strong>Located on:</strong> ${index.hosts.join(', ')}</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-2">
+                            <button class="btn btn-sm btn-outline-primary copy-definition" 
+                                    data-definition="${encodeURIComponent(index.definition)}"
+                                    title="Copy index definition">
+                                <i class="fas fa-copy"></i> Copy Definition
+                            </button>
+                            <button class="btn btn-sm btn-outline-info ml-2 toggle-definition" 
+                                    data-target="${cardId}"
+                                    title="Show/hide index definition">
+                                <i class="fas fa-eye"></i> Show More
+                            </button>
+                        </div>
+                        
+                        <div class="index-definition mt-3" id="${cardId}" style="display: none;">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">Index Definition:</h6>
+                                    <pre class="mb-0" style="white-space: pre-wrap; word-wrap: break-word; font-size: 0.8em;">${index.definition}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // Copy to clipboard functionality
+    $(document).on('click', '.copy-definition', function() {
+        const definition = decodeURIComponent($(this).data('definition'));
+        
+        // Create temporary textarea element
+        const tempTextarea = $('<textarea>').val(definition).appendTo('body').select();
+        
+        try {
+            document.execCommand('copy');
+            $(this).html('<i class="fas fa-check"></i> Copied!').addClass('btn-success').removeClass('btn-outline-primary');
+            
+            // Reset button after 2 seconds
+            setTimeout(() => {
+                $(this).html('<i class="fas fa-copy"></i> Copy Definition').removeClass('btn-success').addClass('btn-outline-primary');
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy text: ', err);
+            $(this).html('<i class="fas fa-times"></i> Failed').addClass('btn-danger').removeClass('btn-outline-primary');
+            setTimeout(() => {
+                $(this).html('<i class="fas fa-copy"></i> Copy Definition').removeClass('btn-danger').addClass('btn-outline-primary');
+            }, 2000);
+        } finally {
+            tempTextarea.remove();
+        }
+    });
+
+    // Toggle definition visibility
+    $(document).on('click', '.toggle-definition', function() {
+        const targetId = $(this).data('target');
+        const targetElement = $(`#${targetId}`);
+        const button = $(this);
+        
+        if (targetElement.is(':visible')) {
+            targetElement.slideUp(200);
+            button.html('<i class="fas fa-eye"></i> Show More').removeClass('btn-info').addClass('btn-outline-info');
+        } else {
+            targetElement.slideDown(200);
+            button.html('<i class="fas fa-eye-slash"></i> Hide').removeClass('btn-outline-info').addClass('btn-info');
+        }
+    });
 });
