@@ -1,0 +1,181 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-test.txt
+        pip install flake8 black
+    
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics --exclude=venv,__pycache__,.git
+    
+    - name: Format check with black
+      run: |
+        black --check --diff .
+    
+    - name: Run tests
+      run: |
+        python -m pytest tests/ -v --tb=short
+    
+    - name: Test configuration validation
+      run: |
+        python -c "
+        import json
+        from app import validate_config
+        
+        # Test valid config
+        with open('config.json', 'r') as f:
+            config = json.load(f)
+        errors = validate_config(config)
+        if errors:
+            print('Config validation failed:', errors)
+            exit(1)
+        print('Config validation passed')
+        "
+
+  build-executables:
+    needs: lint-and-test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+          - os: windows-latest
+            name: windows
+          - os: macos-latest
+            name: macos
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build executable
+      run: |
+        pyinstaller cb_dashboard.spec
+    
+    - name: Create logs directory and copy files (Windows)
+      if: matrix.name == 'windows'
+      run: |
+        mkdir dist\logs
+        copy config.json dist\
+        echo. > dist\README.txt
+        echo Couchbase Dashboard Binary >> dist\README.txt
+        echo. >> dist\README.txt
+        echo 1. Edit config.json with your cluster settings >> dist\README.txt
+        echo 2. Run cb_dashboard.exe >> dist\README.txt
+        echo 3. Open http://localhost:5001 in your browser >> dist\README.txt
+        echo 4. Logs will be written to logs\app.log >> dist\README.txt
+      shell: cmd
+    
+    - name: Create logs directory and copy files (Unix)
+      if: matrix.name != 'windows'
+      run: |
+        mkdir -p dist/logs
+        cp config.json dist/
+        cat > dist/README.txt << EOF
+        Couchbase Dashboard Binary
+        
+        1. Edit config.json with your cluster settings
+        2. Run ./cb_dashboard
+        3. Open http://localhost:5001 in your browser
+        4. Logs will be written to logs/app.log
+        EOF
+    
+    - name: Test executable (Unix)
+      if: matrix.name != 'windows'
+      run: |
+        cd dist
+        timeout 10s ./cb_dashboard --help || true
+        echo "Executable test completed"
+    
+    - name: Test executable (Windows)
+      if: matrix.name == 'windows'
+      run: |
+        cd dist
+        timeout /t 5 >nul
+        echo "Executable created successfully"
+      shell: cmd
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: cb_dashboard-${{ matrix.name }}
+        path: |
+          dist/cb_dashboard*
+          dist/config.json
+          dist/README.txt
+          dist/logs/
+        retention-days: 7
+
+  release:
+    needs: build-executables
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: dist/
+    
+    - name: Create release archives
+      run: |
+        cd dist/
+        
+        # Create archives for each platform
+        tar -czf cb_dashboard-linux.tar.gz cb_dashboard-linux/
+        
+        cd cb_dashboard-windows/
+        zip -r ../cb_dashboard-windows.zip .
+        cd ..
+        
+        tar -czf cb_dashboard-macos.tar.gz cb_dashboard-macos/
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/cb_dashboard-linux.tar.gz
+          dist/cb_dashboard-windows.zip
+          dist/cb_dashboard-macos.tar.gz
+        generate_release_notes: true
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,16 +1,23 @@
-[
-    {
-        "host": "http://127.0.0.1:8091",
-        "user": "Administrator",
-        "pass": "password",
-        "customName": "Local Dev",
-        "watch":true
+{
+    "logging": {
+        "level": "info",
+        "file": "logs/app.log",
+        "enabled": true
     },
-    {
-        "host": "http://2.2.2.2:8091",
-        "user": "Administrator",
-        "pass": "password",
-        "customName": "Production",
-        "watch":false
-    }
+    "clusters": [
+                {
+                    "host": "http://127.0.0.1:8091",
+                    "user": "Administrator",
+                    "pass": "password",
+                    "customName": "Local Development",
+                    "watch":true
+                },
+                {
+                    "host": "http://production.example.com:8091",
+                    "user": "Administrator",
+                    "pass": "secure_password",
+                    "customName": "Production Cluster",
+                    "watch":false
+                }
 ]
+}

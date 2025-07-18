@@ -1,20 +1,90 @@
 import aiohttp
 import asyncio
 import json
+import ssl
+import os
 from flask import Flask, render_template, jsonify
 import logging
+from logging.handlers import RotatingFileHandler
+
+# Version information
+__version__ = "1.0.0"
 
 app = Flask(__name__)
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Global configuration
+config = None
+logger = None
+
+def setup_logging(config_data):
+    """Setup logging based on configuration."""
+    global logger
+    
+    # Create logs directory if it doesn't exist
+    log_dir = os.path.dirname(config_data.get("logging", {}).get("file", "logs/app.log"))
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Configure logging
+    log_level = config_data.get("logging", {}).get("level", "info").upper()
+    log_file = config_data.get("logging", {}).get("file", "logs/app.log")
+    log_enabled = config_data.get("logging", {}).get("enabled", True)
+    
+    # Map string levels to logging constants
+    level_map = {
+        "TRACE": logging.DEBUG,  # Use DEBUG for TRACE since Python logging doesn't have TRACE
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR
+    }
+    
+    numeric_level = level_map.get(log_level, logging.INFO)
+    
+    # Create logger and assign to global variable
+    logger = logging.getLogger(__name__)
+    logger.setLevel(numeric_level)
+    
+    # Clear existing handlers
+    logger.handlers.clear()
+    
+    # Create formatter
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    if log_enabled:
+        # File handler with rotation
+        file_handler = RotatingFileHandler(
+            log_file, maxBytes=10*1024*1024, backupCount=5
+        )
+        file_handler.setLevel(numeric_level)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(numeric_level)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    logger.info(f"Couchbase Dashboard v{__version__} starting up")
+    logger.info(f"Logging configured: level={log_level}, file={log_file}, enabled={log_enabled}")
+    
+    return logger
 
 async def fetch_cluster_data(session, host, user, password):
     """Fetch data from a Couchbase cluster's /pools/default endpoint."""
     url = f"{host}/pools/default"
     try:
-        async with session.get(url, auth=aiohttp.BasicAuth(user, password), timeout=10) as response:
+        # Create SSL context for HTTPS requests
+        ssl_context = None
+        if host.startswith('https://'):
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+        
+        async with session.get(url, auth=aiohttp.BasicAuth(user, password), 
+                              timeout=10, ssl=ssl_context) as response:
             if response.status == 200:
                 data = await response.json()
                 return {"host": host, "data": data, "error": None}
@@ -32,7 +102,15 @@ async def fetch_bucket_data(session, host, bucket_name, user, password):
     """Fetch detailed data for a specific bucket."""
     url = f"{host}/pools/default/buckets/{bucket_name}"
     try:
-        async with session.get(url, auth=aiohttp.BasicAuth(user, password), timeout=10) as response:
+        # Create SSL context for HTTPS requests
+        ssl_context = None
+        if host.startswith('https://'):
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+        
+        async with session.get(url, auth=aiohttp.BasicAuth(user, password), 
+                              timeout=10, ssl=ssl_context) as response:
             if response.status == 200:
                 data = await response.json()
                 return {"bucket_name": bucket_name, "data": data, "error": None}
@@ -50,7 +128,15 @@ async def fetch_bucket_stats(session, host, bucket_name, user, password):
     """Fetch stats data for a specific bucket."""
     url = f"{host}/pools/default/buckets/{bucket_name}/stats"
     try:
-        async with session.get(url, auth=aiohttp.BasicAuth(user, password), timeout=10) as response:
+        # Create SSL context for HTTPS requests
+        ssl_context = None
+        if host.startswith('https://'):
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+        
+        async with session.get(url, auth=aiohttp.BasicAuth(user, password), 
+                              timeout=10, ssl=ssl_context) as response:
             if response.status == 200:
                 data = await response.json()
                 return {"bucket_name": bucket_name, "stats": data, "error": None}
@@ -68,7 +154,15 @@ async def fetch_index_status(session, host, user, password):
     """Fetch index status data from /indexStatus endpoint."""
     url = f"{host}/indexStatus"
     try:
-        async with session.get(url, auth=aiohttp.BasicAuth(user, password), timeout=10) as response:
+        # Create SSL context for HTTPS requests
+        ssl_context = None
+        if host.startswith('https://'):
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+        
+        async with session.get(url, auth=aiohttp.BasicAuth(user, password), 
+                              timeout=10, ssl=ssl_context) as response:
             if response.status == 200:
                 data = await response.json()
                 return {"host": host, "data": data, "error": None}
@@ -181,13 +275,105 @@ async def create_not_watching_result(cluster_config):
         "not_watching": True
     }
 
+def validate_config(config_data):
+    """Validate configuration structure and required fields."""
+    errors = []
+    
+    # Check if config has required top-level structure
+    if not isinstance(config_data, dict):
+        errors.append("Config must be a JSON object")
+        return errors
+    
+    # Validate logging section
+    if "logging" not in config_data:
+        errors.append("Missing 'logging' section in config")
+    else:
+        logging_config = config_data["logging"]
+        if not isinstance(logging_config, dict):
+            errors.append("'logging' must be an object")
+        else:
+            # Check required logging fields
+            if "level" not in logging_config:
+                errors.append("Missing 'level' in logging config")
+            elif logging_config["level"] not in ["trace", "debug", "info", "warning", "error"]:
+                errors.append("Invalid logging level. Must be one of: trace, debug, info, warning, error")
+            
+            if "file" not in logging_config:
+                errors.append("Missing 'file' in logging config")
+            
+            if "enabled" not in logging_config:
+                errors.append("Missing 'enabled' in logging config")
+    
+    # Validate clusters section
+    if "clusters" not in config_data:
+        errors.append("Missing 'clusters' section in config")
+    else:
+        clusters = config_data["clusters"]
+        if not isinstance(clusters, list):
+            errors.append("'clusters' must be an array")
+        else:
+            for i, cluster in enumerate(clusters):
+                if not isinstance(cluster, dict):
+                    errors.append(f"Cluster {i} must be an object")
+                    continue
+                
+                # Check required cluster fields
+                required_fields = ["host", "user", "pass"]
+                for field in required_fields:
+                    if field not in cluster:
+                        errors.append(f"Missing '{field}' in cluster {i}")
+                
+                # Validate host URL
+                if "host" in cluster:
+                    host = cluster["host"]
+                    if not (host.startswith("http://") or host.startswith("https://")):
+                        errors.append(f"Invalid host format in cluster {i}: must start with http:// or https://")
+                
+                # Validate optional fields
+                if "watch" in cluster and not isinstance(cluster["watch"], bool):
+                    errors.append(f"'watch' field in cluster {i} must be a boolean")
+    
+    return errors
+
 def load_config():
-    """Load cluster configurations from config.json."""
+    """Load and validate cluster configurations from config.json."""
+    global config
     try:
         with open("config.json", "r") as f:
-            return json.load(f)
+            config_data = json.load(f)
+        
+        # Validate configuration
+        errors = validate_config(config_data)
+        if errors:
+            for error in errors:
+                if logger:
+                    logger.error(f"Config validation error: {error}")
+                else:
+                    print(f"Config validation error: {error}")
+            raise ValueError(f"Configuration validation failed: {'; '.join(errors)}")
+        
+        config = config_data
+        return config_data["clusters"]
+    except FileNotFoundError:
+        error_msg = "config.json file not found"
+        if logger:
+            logger.error(error_msg)
+        else:
+            print(error_msg)
+        return []
+    except json.JSONDecodeError as e:
+        error_msg = f"Invalid JSON in config.json: {str(e)}"
+        if logger:
+            logger.error(error_msg)
+        else:
+            print(error_msg)
+        return []
     except Exception as e:
-        logger.error(f"Error loading config.json: {str(e)}")
+        error_msg = f"Error loading config.json: {str(e)}"
+        if logger:
+            logger.error(error_msg)
+        else:
+            print(error_msg)
         return []
 
 def process_cluster_data(clusters_data):
@@ -328,6 +514,10 @@ def index():
 
 @app.route("/api/clusters")
 def get_clusters_data():
+    # Ensure logger is initialized
+    if logger is None:
+        initialize_app()
+    
     # Load cluster configurations
     clusters_config = load_config()
     if not clusters_config:
@@ -347,6 +537,10 @@ def get_clusters_data():
 def get_bucket_stats(cluster_host, bucket_name):
     """API endpoint to get detailed stats for a specific bucket."""
     try:
+        # Ensure logger is initialized
+        if logger is None:
+            initialize_app()
+        
         clusters = load_config()
         cluster = next((c for c in clusters if c["host"] == f"http://{cluster_host}:8091"), None)
         if not cluster:
@@ -374,6 +568,10 @@ def get_bucket_stats(cluster_host, bucket_name):
 def get_index_status():
     """API endpoint to get index status from all clusters."""
     try:
+        # Ensure logger is initialized
+        if logger is None:
+            initialize_app()
+        
         clusters = load_config()
         if not clusters:
             return jsonify({"error": "No clusters configured"}), 500
@@ -428,5 +626,41 @@ def get_index_status():
         logger.error(f"Error in get_index_status: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+def initialize_app():
+    """Initialize the application with configuration and logging."""
+    global config, logger
+    
+    # Load configuration first
+    config_data = {}
+    try:
+        with open("config.json", "r") as f:
+            config_data = json.load(f)
+    except Exception as e:
+        print(f"Error loading config.json: {str(e)}")
+        # Use default configuration if config.json fails to load
+        config_data = {
+            "logging": {
+                "level": "info",
+                "file": "logs/app.log",
+                "enabled": True
+            },
+            "clusters": []
+        }
+    
+    # Setup logging
+    logger = setup_logging(config_data)
+    
+    # Store global config
+    config = config_data
+    
+    return config_data
+
 if __name__ == "__main__":
+    # Initialize application
+    config_data = initialize_app()
+    
+    # Print version information
+    print(f"Couchbase Dashboard v{__version__}")
+    
+    # Run the application
     app.run(debug=True, port=5001)
