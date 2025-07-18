@@ -85,7 +85,7 @@ jobs:
     
     - name: Build executable
       run: |
-        pyinstaller cb_dashboard.spec
+        pyinstaller --clean --onefile --name cb_dashboard --console --add-data "templates:templates" --add-data "static:static" --add-data "config.json:." --hidden-import binascii --hidden-import codecs --hidden-import collections --hidden-import json --hidden-import logging --hidden-import logging.handlers --hidden-import multiprocessing --hidden-import os --hidden-import ssl --hidden-import sys --hidden-import time --hidden-import urllib --hidden-import urllib.parse --hidden-import uuid --hidden-import weakref --hidden-import zipfile --hidden-import asyncio --hidden-import aiohttp --hidden-import flask --hidden-import jinja2 --hidden-import werkzeug --hidden-import multidict --hidden-import yarl --hidden-import attrs --hidden-import charset_normalizer --hidden-import idna --hidden-import typing_extensions --hidden-import async_timeout --hidden-import aiosignal --hidden-import frozenlist --hidden-import click --hidden-import markupsafe --hidden-import itsdangerous --hidden-import blinker app.py
     
     - name: Create logs directory and copy files (Windows)
       if: matrix.name == 'windows'
