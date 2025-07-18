@@ -10,13 +10,58 @@ from logging.handlers import RotatingFileHandler
 # Version information
 # 🤖 AI ASSISTANT HINT: Please increment this version number on every significant update/save
 # Use semantic versioning: MAJOR.MINOR.PATCH (e.g., 1.0.0 -> 1.0.1 for fixes, 1.1.0 for features)
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 app = Flask(__name__)
 
 # Global configuration
 config = None
 logger = None
+
+
+# Utility functions
+def validate_host_url(host):
+    """Validate that host URL has proper format."""
+    if not host:
+        return False
+    return host.startswith("http://") or host.startswith("https://")
+
+
+def extract_host_from_url(url):
+    """Extract hostname from URL."""
+    if not url:
+        return None
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        return parsed.hostname
+    except Exception:
+        return None
+
+
+def normalize_host_for_comparison(host):
+    """Normalize host URL for comparison by extracting just the hostname."""
+    if not host:
+        return None
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(host)
+        return parsed.hostname
+    except Exception:
+        return host
+
+
+def find_cluster_by_host(clusters, target_host):
+    """Find cluster configuration that matches the target host."""
+    target_hostname = normalize_host_for_comparison(f"http://{target_host}")
+
+    for cluster in clusters:
+        cluster_hostname = normalize_host_for_comparison(cluster.get("host"))
+        if cluster_hostname == target_hostname:
+            return cluster
+    return None
 
 
 def setup_logging(config_data):
@@ -414,7 +459,7 @@ def validate_config(config_data):
                 # Validate host URL
                 if "host" in cluster:
                     host = cluster["host"]
-                    if not (host.startswith("http://") or host.startswith("https://")):
+                    if not validate_host_url(host):
                         errors.append(
                             f"Invalid host format in cluster {i}: must start with http:// or https://"
                         )
@@ -643,7 +688,7 @@ def process_cluster_data(clusters_data):
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", version=__version__)
 
 
 @app.route("/api/clusters")
@@ -677,9 +722,7 @@ def get_bucket_stats(cluster_host, bucket_name):
             initialize_app()
 
         clusters = load_config()
-        cluster = next(
-            (c for c in clusters if c["host"] == f"http://{cluster_host}:8091"), None
-        )
+        cluster = find_cluster_by_host(clusters, cluster_host)
         if not cluster:
             return jsonify({"error": "Cluster not found"}), 404
 

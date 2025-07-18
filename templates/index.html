@@ -11,7 +11,23 @@
 </head>
 <body>
     <div class="container-fluid">
-        <h4 class="mt-4">Couchbase Cluster Dashboard</h4>
+        <!-- Version info in upper right corner -->
+        <div class="position-absolute" style="top: 10px; right: 20px; font-size: 0.75rem; color: #6c757d;">
+            v{{ version }}
+        </div>
+        
+        <!-- Header with centered title and stats -->
+        <div class="row mt-4 mb-3">
+            <div class="col-12 text-center">
+                <h4 class="d-inline-block mb-0">Couchbase Cluster Dashboard</h4>
+                <div id="cluster-stats" class="d-inline-block ml-3 small">
+                    <span id="healthy-count" class="badge badge-success">0 Healthy</span>
+                    <span id="not-watching-count" class="badge badge-warning">0 Not Watching</span>
+                    <span id="unhealthy-count" class="badge badge-danger">0 Unhealthy</span>
+                </div>
+            </div>
+        </div>
+        
         <div class="row">
             <div class="col-12">
                 <div id="last-updated" class="text-muted small mb-3"></div>

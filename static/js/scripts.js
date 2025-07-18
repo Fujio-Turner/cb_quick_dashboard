@@ -39,6 +39,7 @@ $(document).ready(function() {
                 } else {
                     updateClustersData(clusters);
                 }
+                updateClusterStats(clusters);
                 updateLastUpdated();
             },
             error: function(xhr, status, error) {
@@ -51,6 +52,26 @@ $(document).ready(function() {
     function updateLastUpdated() {
         const now = new Date();
         $('#last-updated').text('Last updated: ' + now.toLocaleString());
+    }
+
+    function updateClusterStats(clusters) {
+        let healthyCount = 0;
+        let notWatchingCount = 0;
+        let unhealthyCount = 0;
+
+        clusters.forEach(cluster => {
+            if (cluster.not_watching) {
+                notWatchingCount++;
+            } else if (cluster.health === true) {
+                healthyCount++;
+            } else {
+                unhealthyCount++;
+            }
+        });
+
+        $('#healthy-count').text(`${healthyCount} Healthy`);
+        $('#not-watching-count').text(`${notWatchingCount} Not Watching`);
+        $('#unhealthy-count').text(`${unhealthyCount} Unhealthy`);
     }
 
     function initializeClusters(clusters) {
