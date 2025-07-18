@@ -8,7 +8,9 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 # Version information
-__version__ = "1.0.0"
+# 🤖 AI ASSISTANT HINT: Please increment this version number on every significant update/save
+# Use semantic versioning: MAJOR.MINOR.PATCH (e.g., 1.0.0 -> 1.0.1 for fixes, 1.1.0 for features)
+__version__ = "1.0.1"
 
 app = Flask(__name__)
 
@@ -818,16 +820,17 @@ if __name__ == "__main__":
     # Print version information
     print(f"Couchbase Dashboard v{__version__}")
 
-    # Parse command line arguments
-    port = 5001
-    debug = True
+    # Get server configuration from config
+    server_config = config_data.get("server", {})
+    port = server_config.get("port", 5000)  # Default to 5000 if not specified
+    debug = server_config.get("debug", True)  # Default to True for development
 
     # Check if we're running as a PyInstaller executable
     if getattr(sys, "frozen", False):
         # Running as PyInstaller executable - disable debug mode
         debug = False
 
-    # Parse command line arguments for port
+    # Parse command line arguments for port (overrides config)
     if len(sys.argv) > 1:
         for i, arg in enumerate(sys.argv):
             if arg == "--port" and i + 1 < len(sys.argv):
@@ -836,6 +839,10 @@ if __name__ == "__main__":
                 except ValueError:
                     print(f"Invalid port number: {sys.argv[i + 1]}")
                     sys.exit(1)
+
+    # Log server startup configuration
+    if logger:
+        logger.info(f"Starting Flask server on port {port} (debug={debug})")
 
     # Run the application
     app.run(debug=debug, port=port)
