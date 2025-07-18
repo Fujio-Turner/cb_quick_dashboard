@@ -379,12 +379,8 @@ class TestLoadConfig:
             }
         ]
         mock_config = {
-            "logging": {
-                "level": "info",
-                "file": "logs/app.log",
-                "enabled": True
-            },
-            "clusters": mock_clusters
+            "logging": {"level": "info", "file": "logs/app.log", "enabled": True},
+            "clusters": mock_clusters,
         }
         mock_json_load.return_value = mock_config
 
