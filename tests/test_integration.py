@@ -18,23 +18,25 @@ from app import app, get_all_clusters_data, process_cluster_data
 
 class TestIntegration:
     """Integration tests for the complete application workflow"""
-    
+
     def setup_method(self):
         """Set up test client"""
         self.app = app
-        self.app.config['TESTING'] = True
+        self.app.config["TESTING"] = True
         self.client = self.app.test_client()
-    
+
     def test_index_route(self):
         """Test the main index route"""
-        response = self.client.get('/')
+        response = self.client.get("/")
         assert response.status_code == 200
-        assert b'Couchbase Cluster Dashboard' in response.data
-    
-    @patch('app.load_config')
-    @patch('app.get_all_clusters_data')
-    @patch('app.process_cluster_data')
-    def test_api_clusters_endpoint_success(self, mock_process, mock_get_data, mock_load_config):
+        assert b"Couchbase Cluster Dashboard" in response.data
+
+    @patch("app.load_config")
+    @patch("app.get_all_clusters_data")
+    @patch("app.process_cluster_data")
+    def test_api_clusters_endpoint_success(
+        self, mock_process, mock_get_data, mock_load_config
+    ):
         """Test successful API clusters endpoint"""
         # Mock configuration
         mock_load_config.return_value = [
@@ -42,19 +44,19 @@ class TestIntegration:
                 "host": "http://localhost:8091",
                 "user": "admin",
                 "pass": "password",
-                "watch": True
+                "watch": True,
             }
         ]
-        
+
         # Mock cluster data fetch
         mock_get_data.return_value = [
             {
                 "host": "http://localhost:8091",
                 "data": {"clusterName": "test-cluster"},
-                "error": None
+                "error": None,
             }
         ]
-        
+
         # Mock processed data
         mock_process.return_value = [
             {
@@ -66,43 +68,43 @@ class TestIntegration:
                 "nodes": [],
                 "buckets": [],
                 "bucket_stats": [],
-                "systemStats": {}
+                "systemStats": {},
             }
         ]
-        
-        response = self.client.get('/api/clusters')
+
+        response = self.client.get("/api/clusters")
         assert response.status_code == 200
-        
+
         data = json.loads(response.data)
         assert len(data) == 1
-        assert data[0]['clusterName'] == 'test-cluster'
-        assert data[0]['health'] is True
-    
-    @patch('app.load_config')
+        assert data[0]["clusterName"] == "test-cluster"
+        assert data[0]["health"] is True
+
+    @patch("app.load_config")
     def test_api_clusters_endpoint_no_config(self, mock_load_config):
         """Test API clusters endpoint with no configuration"""
         mock_load_config.return_value = []
-        
-        response = self.client.get('/api/clusters')
+
+        response = self.client.get("/api/clusters")
         assert response.status_code == 500
-        
+
         data = json.loads(response.data)
-        assert 'error' in data
-        assert 'No clusters configured' in data['error']
-    
+        assert "error" in data
+        assert "No clusters configured" in data["error"]
+
     def test_api_bucket_stats_missing_cluster(self):
         """Test bucket stats endpoint with missing cluster"""
-        response = self.client.get('/api/bucket/nonexistent:8091/test-bucket/stats')
+        response = self.client.get("/api/bucket/nonexistent:8091/test-bucket/stats")
         assert response.status_code == 404
-        
+
         data = json.loads(response.data)
-        assert 'error' in data
-        assert 'Cluster not found' in data['error']
+        assert "error" in data
+        assert "Cluster not found" in data["error"]
 
 
 class TestFullWorkflow:
     """Test the complete workflow from config to display"""
-    
+
     @pytest.mark.asyncio
     async def test_watched_cluster_workflow(self):
         """Test complete workflow for watched cluster"""
@@ -112,10 +114,10 @@ class TestFullWorkflow:
                 "host": "http://localhost:8091",
                 "user": "admin",
                 "pass": "password",
-                "watch": True
+                "watch": True,
             }
         ]
-        
+
         # Mock successful cluster response
         mock_cluster_data = {
             "clusterName": "Production",
@@ -128,41 +130,41 @@ class TestFullWorkflow:
                     "systemStats": {
                         "cpu_utilization_rate": 75.5,
                         "mem_total": 8589934592,
-                        "mem_free": 4294967296
-                    }
+                        "mem_free": 4294967296,
+                    },
                 }
             ],
             "storageTotals": {
                 "ram": {
                     "total": 8589934592,
                     "used": 4294967296,
-                    "quotaTotal": 6442450944
+                    "quotaTotal": 6442450944,
                 },
                 "hdd": {
                     "total": 107374182400,
                     "used": 53687091200,
-                    "free": 53687091200
-                }
+                    "free": 53687091200,
+                },
             },
-            "bucketNames": [{"bucketName": "test-bucket"}]
+            "bucketNames": [{"bucketName": "test-bucket"}],
         }
-        
-        with patch('app.fetch_cluster_data_with_timeout') as mock_fetch:
+
+        with patch("app.fetch_cluster_data_with_timeout") as mock_fetch:
             mock_fetch.return_value = {
                 "host": "http://localhost:8091",
                 "data": mock_cluster_data,
-                "error": None
+                "error": None,
             }
-            
+
             # Test data fetching
             results = await get_all_clusters_data(clusters)
             assert len(results) == 1
             assert results[0]["data"]["clusterName"] == "Production"
-            
+
             # Test data processing
             processed = process_cluster_data(results)
             assert len(processed) == 1
-            
+
             cluster = processed[0]
             assert cluster["clusterName"] == "Production"
             assert cluster["health"] is True
@@ -170,34 +172,34 @@ class TestFullWorkflow:
             assert cluster["disk"]["total"] == 100.0  # GB
             assert len(cluster["nodes"]) == 1
             assert not cluster.get("not_watching", False)
-    
+
     @pytest.mark.asyncio
     async def test_unwatched_cluster_workflow(self):
         """Test complete workflow for unwatched cluster"""
         clusters = [
             {
                 "host": "http://localhost:8091",
-                "user": "admin", 
+                "user": "admin",
                 "pass": "password",
-                "watch": False
+                "watch": False,
             }
         ]
-        
+
         # Test data fetching (should not make HTTP calls)
         results = await get_all_clusters_data(clusters)
         assert len(results) == 1
         assert results[0]["not_watching"] is True
         assert results[0]["data"] is None
-        
+
         # Test data processing
         processed = process_cluster_data(results)
         assert len(processed) == 1
-        
+
         cluster = processed[0]
         assert cluster["clusterName"] == "Not Watching"
         assert cluster["health"] is None
         assert cluster["not_watching"] is True
-    
+
     @pytest.mark.asyncio
     async def test_mixed_cluster_workflow(self):
         """Test workflow with both watched and unwatched clusters"""
@@ -206,34 +208,34 @@ class TestFullWorkflow:
                 "host": "http://localhost:8091",
                 "user": "admin",
                 "pass": "password",
-                "watch": True
+                "watch": True,
             },
             {
                 "host": "http://localhost:8092",
                 "user": "admin",
                 "pass": "password",
-                "watch": False
-            }
+                "watch": False,
+            },
         ]
-        
-        with patch('app.fetch_cluster_data_with_timeout') as mock_fetch:
+
+        with patch("app.fetch_cluster_data_with_timeout") as mock_fetch:
             mock_fetch.return_value = {
                 "host": "http://localhost:8091",
                 "data": {"clusterName": "Watched Cluster"},
-                "error": None
+                "error": None,
             }
-            
+
             results = await get_all_clusters_data(clusters)
             assert len(results) == 2
-            
+
             # First cluster should be watched
             assert not results[0].get("not_watching", False)
             assert results[0]["data"]["clusterName"] == "Watched Cluster"
-            
+
             # Second cluster should be unwatched
             assert results[1]["not_watching"] is True
             assert results[1]["data"] is None
-            
+
             # Test processing
             processed = process_cluster_data(results)
             assert len(processed) == 2
@@ -243,7 +245,7 @@ class TestFullWorkflow:
 
 class TestErrorHandling:
     """Test error handling scenarios"""
-    
+
     @pytest.mark.asyncio
     async def test_cluster_timeout_handling(self):
         """Test handling of cluster timeouts"""
@@ -252,26 +254,26 @@ class TestErrorHandling:
                 "host": "http://timeout-cluster:8091",
                 "user": "admin",
                 "pass": "password",
-                "watch": True
+                "watch": True,
             }
         ]
-        
-        with patch('app.fetch_cluster_data_with_timeout') as mock_fetch:
+
+        with patch("app.fetch_cluster_data_with_timeout") as mock_fetch:
             mock_fetch.return_value = {
                 "host": "http://timeout-cluster:8091",
                 "data": None,
-                "error": "Request timeout after 15 seconds"
+                "error": "Request timeout after 15 seconds",
             }
-            
+
             results = await get_all_clusters_data(clusters)
             processed = process_cluster_data(results)
-            
+
             assert len(processed) == 1
             cluster = processed[0]
             assert cluster["clusterName"] == "Error"
             assert cluster["health"] is False
             assert "timeout" in cluster["error"]
-    
+
     @pytest.mark.asyncio
     async def test_cluster_connection_error(self):
         """Test handling of connection errors"""
@@ -280,20 +282,20 @@ class TestErrorHandling:
                 "host": "http://unreachable-cluster:8091",
                 "user": "admin",
                 "pass": "password",
-                "watch": True
+                "watch": True,
             }
         ]
-        
-        with patch('app.fetch_cluster_data_with_timeout') as mock_fetch:
+
+        with patch("app.fetch_cluster_data_with_timeout") as mock_fetch:
             mock_fetch.return_value = {
                 "host": "http://unreachable-cluster:8091",
                 "data": None,
-                "error": "Connection refused"
+                "error": "Connection refused",
             }
-            
+
             results = await get_all_clusters_data(clusters)
             processed = process_cluster_data(results)
-            
+
             assert len(processed) == 1
             cluster = processed[0]
             assert cluster["health"] is False
@@ -302,36 +304,40 @@ class TestErrorHandling:
 
 class TestConfigurationHandling:
     """Test configuration loading and validation"""
-    
+
     def test_load_test_config(self):
         """Test loading the test configuration file"""
         # First load the actual test config to see what we expect
-        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.test.json')
-        with open(config_path, 'r') as f:
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "config.test.json",
+        )
+        with open(config_path, "r") as f:
             test_config = json.load(f)
-        
+
         # Now test the load_config function with mocked file operations
-        with patch('builtins.open', create=True) as mock_open:
-            with patch('json.load') as mock_json:
+        with patch("builtins.open", create=True) as mock_open:
+            with patch("json.load") as mock_json:
                 mock_json.return_value = test_config
-                
+
                 from app import load_config
+
                 config = load_config()
-                
+
                 assert len(config) == 3
                 assert config[0]["watch"] is True
                 assert config[1]["watch"] is False
                 assert "watch" not in config[2] or config[2].get("watch") is None
-    
+
     def test_default_watch_behavior(self):
         """Test that clusters default to watch=True when not specified"""
         cluster_config = {
             "host": "http://localhost:8091",
             "user": "admin",
-            "pass": "password"
+            "pass": "password",
             # No watch field
         }
-        
+
         # Should default to True
         watch_value = cluster_config.get("watch", True)
         assert watch_value is True

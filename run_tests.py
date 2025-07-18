@@ -16,7 +16,7 @@ def run_command(command, description):
     print(f"Running: {description}")
     print(f"Command: {command}")
     print(f"{'='*60}")
-    
+
     try:
         result = subprocess.run(command, shell=True, check=True, capture_output=False)
         print(f"✅ {description} completed successfully")
@@ -32,15 +32,16 @@ def run_command(command, description):
 def check_dependencies():
     """Check if required dependencies are installed"""
     print("Checking dependencies...")
-    
+
     # Check Python dependencies
     try:
         import pytest
+
         print("✅ pytest is available")
     except ImportError:
         print("❌ pytest not found. Install with: pip install -r requirements-test.txt")
         return False
-    
+
     # Check if Node.js and npm are available for JavaScript tests
     try:
         subprocess.run(["node", "--version"], capture_output=True, check=True)
@@ -49,7 +50,7 @@ def check_dependencies():
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("⚠️  Node.js/npm not found. JavaScript tests will be skipped.")
         return "python_only"
-    
+
     return True
 
 
@@ -65,14 +66,14 @@ def run_python_tests():
     """Run Python backend tests"""
     commands = [
         ("pytest tests/test_app.py -v", "Python unit tests"),
-        ("pytest tests/test_integration.py -v", "Python integration tests")
+        ("pytest tests/test_integration.py -v", "Python integration tests"),
     ]
-    
+
     success = True
     for command, description in commands:
         if not run_command(command, description):
             success = False
-    
+
     return success
 
 
@@ -80,14 +81,14 @@ def run_javascript_tests():
     """Run JavaScript frontend tests"""
     commands = [
         ("npm test", "JavaScript unit tests"),
-        ("npm run test:coverage", "JavaScript tests with coverage")
+        ("npm run test:coverage", "JavaScript tests with coverage"),
     ]
-    
+
     success = True
     for command, description in commands:
         if not run_command(command, description):
             success = False
-    
+
     return success
 
 
@@ -105,18 +106,18 @@ def generate_test_report():
     print(f"\n{'='*60}")
     print("TEST SUMMARY")
     print(f"{'='*60}")
-    
+
     # Check for coverage reports
     if os.path.exists("htmlcov/index.html"):
         print("📊 Python coverage report: htmlcov/index.html")
-    
+
     if os.path.exists("coverage/index.html"):
         print("📊 JavaScript coverage report: coverage/index.html")
-    
+
     # Check for test artifacts
     if os.path.exists("pytest_cache"):
         print("🗂️  Python test cache: pytest_cache/")
-    
+
     print("\n📋 Test files:")
     for test_file in ["tests/test_app.py", "tests/test_scripts.js"]:
         if os.path.exists(test_file):
@@ -129,31 +130,31 @@ def main():
     """Main test runner function"""
     print("🧪 Couchbase Quick Dashboard Test Runner")
     print("=========================================")
-    
+
     # Check dependencies
     deps_status = check_dependencies()
     if deps_status is False:
         sys.exit(1)
-    
+
     all_success = True
-    
+
     # Run Python tests
     print("\n🐍 Running Python Backend Tests...")
     if not run_python_tests():
         all_success = False
-    
+
     # Skip JavaScript tests for now
     print("\n🟨 Skipping JavaScript Frontend Tests...")
     print("   (Jest environment configuration needs to be updated)")
-    
+
     # Run integration tests
     print("\n🔗 Running Integration Tests...")
     if not run_integration_tests():
         all_success = False
-    
+
     # Generate report
     generate_test_report()
-    
+
     # Final status
     print(f"\n{'='*60}")
     if all_success:
