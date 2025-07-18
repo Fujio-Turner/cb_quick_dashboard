@@ -1,22 +1,29 @@
-[
-    {
-        "host": "http://localhost:8091",
-        "user": "test_admin",
-        "pass": "test_password",
-        "customName": "Test Cluster 1",
-        "watch": true
+{
+    "logging": {
+        "level": "info",
+        "file": "logs/app.log",
+        "enabled": true
     },
-    {
-        "host": "http://localhost:8092",
-        "user": "test_admin",
-        "pass": "test_password", 
-        "customName": "Test Cluster 2",
-        "watch": false
-    },
-    {
-        "host": "http://localhost:8093",
-        "user": "test_admin",
-        "pass": "test_password",
-        "customName": "Test Cluster 3"
-    }
-]
+    "clusters": [
+        {
+            "host": "http://localhost:8091",
+            "user": "test_admin",
+            "pass": "test_password",
+            "customName": "Test Cluster 1",
+            "watch": true
+        },
+        {
+            "host": "http://localhost:8092",
+            "user": "test_admin",
+            "pass": "test_password", 
+            "customName": "Test Cluster 2",
+            "watch": false
+        },
+        {
+            "host": "http://localhost:8093",
+            "user": "test_admin",
+            "pass": "test_password",
+            "customName": "Test Cluster 3"
+        }
+    ]
+}

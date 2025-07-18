@@ -370,7 +370,7 @@ class TestLoadConfig:
     @patch("json.load")
     def test_load_config_success(self, mock_json_load, mock_open):
         """Test successful config loading"""
-        mock_config = [
+        mock_clusters = [
             {
                 "host": "http://localhost:8091",
                 "user": "admin",
@@ -378,11 +378,19 @@ class TestLoadConfig:
                 "watch": True,
             }
         ]
+        mock_config = {
+            "logging": {
+                "level": "info",
+                "file": "logs/app.log",
+                "enabled": True
+            },
+            "clusters": mock_clusters
+        }
         mock_json_load.return_value = mock_config
 
         result = load_config()
 
-        assert result == mock_config
+        assert result == mock_clusters
         mock_open.assert_called_once_with("config.json", "r")
 
     @patch("builtins.open")
