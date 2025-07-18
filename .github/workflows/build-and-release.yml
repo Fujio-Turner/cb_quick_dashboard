@@ -119,15 +119,25 @@ jobs:
       if: matrix.name != 'windows'
       run: |
         cd dist
-        timeout 10s ./cb_dashboard --help || true
-        echo "Executable test completed"
+        if [ -f "cb_dashboard" ]; then
+          echo "Executable created successfully"
+          chmod +x cb_dashboard
+          file cb_dashboard
+        else
+          echo "ERROR: Executable not found"
+          exit 1
+        fi
     
     - name: Test executable (Windows)
       if: matrix.name == 'windows'
       run: |
         cd dist
-        timeout /t 5 >nul
-        echo "Executable created successfully"
+        if exist cb_dashboard.exe (
+          echo "Executable created successfully"
+        ) else (
+          echo "ERROR: Executable not found"
+          exit /b 1
+        )
       shell: cmd
     
     - name: Upload artifact
