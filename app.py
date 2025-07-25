@@ -241,6 +241,63 @@ async def fetch_index_status(session, host, user, password):
         return {"host": host, "data": None, "error": str(e)}
 
 
+async def fetch_xdcr_data(session, host, user, password):
+    """Fetch XDCR data from remote clusters and tasks endpoints."""
+    try:
+        # Create SSL context for HTTPS requests
+        ssl_context = None
+        if host.startswith("https://"):
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+
+        # Fetch remote clusters
+        remote_clusters_url = f"{host}/pools/default/remoteClusters"
+        tasks_url = f"{host}/pools/default/tasks"
+        
+        # Fetch both endpoints concurrently
+        async with session.get(
+            remote_clusters_url, auth=aiohttp.BasicAuth(user, password), timeout=10, ssl=ssl_context
+        ) as remote_clusters_response, session.get(
+            tasks_url, auth=aiohttp.BasicAuth(user, password), timeout=10, ssl=ssl_context
+        ) as tasks_response:
+            
+            remote_clusters_data = []
+            xdcr_tasks_data = []
+            errors = []
+            
+            # Process remote clusters response
+            if remote_clusters_response.status == 200:
+                remote_clusters_data = await remote_clusters_response.json()
+            else:
+                errors.append(f"Remote clusters failed with status {remote_clusters_response.status}")
+            
+            # Process tasks response
+            if tasks_response.status == 200:
+                all_tasks = await tasks_response.json()
+                # Filter for XDCR tasks only
+                xdcr_tasks_data = [task for task in all_tasks if task.get("type") == "xdcr"]
+            else:
+                errors.append(f"Tasks failed with status {tasks_response.status}")
+            
+            return {
+                "host": host,
+                "remoteClusters": remote_clusters_data,
+                "xdcrTasks": xdcr_tasks_data,
+                "error": "; ".join(errors) if errors else None,
+            }
+            
+    except Exception as e:
+        if logger:
+            logger.error(f"Error fetching XDCR data from {host}: {str(e)}")
+        return {
+            "host": host,
+            "remoteClusters": [],
+            "xdcrTasks": [],
+            "error": str(e),
+        }
+
+
 async def get_all_clusters_data(clusters):
     """Fetch data from all clusters and their buckets asynchronously with timeout handling."""
     async with aiohttp.ClientSession() as session:
@@ -825,6 +882,79 @@ def get_index_status():
         return jsonify(result)
     except Exception as e:
         logger.error(f"Error in get_index_status: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/xdcrStatus")
+def get_xdcr_status():
+    """API endpoint to get XDCR status from all clusters."""
+    try:
+        # Ensure logger is initialized
+        if logger is None:
+            initialize_app()
+
+        clusters = load_config()
+        if not clusters:
+            return jsonify({"error": "No clusters configured"}), 500
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        async def fetch_all_xdcr_status():
+            results = []
+            async with aiohttp.ClientSession() as session:
+                tasks = []
+                for cluster in clusters:
+                    if cluster.get("watch", True):
+                        task = fetch_xdcr_data(
+                            session, cluster["host"], cluster["user"], cluster["pass"]
+                        )
+                        tasks.append(task)
+
+                xdcr_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                cluster_index = 0
+                for i, result in enumerate(xdcr_results):
+                    # Find the corresponding cluster that was watched
+                    while cluster_index < len(clusters) and not clusters[
+                        cluster_index
+                    ].get("watch", True):
+                        cluster_index += 1
+
+                    if cluster_index >= len(clusters):
+                        break
+
+                    if isinstance(result, Exception):
+                        logger.error(f"Error fetching XDCR status: {str(result)}")
+                        results.append(
+                            {
+                                "host": clusters[cluster_index]["host"],
+                                "customName": clusters[cluster_index].get("customName"),
+                                "remoteClusters": [],
+                                "xdcrTasks": [],
+                                "error": str(result),
+                            }
+                        )
+                    else:
+                        results.append(
+                            {
+                                "host": result["host"],
+                                "customName": clusters[cluster_index].get("customName"),
+                                "remoteClusters": result.get("remoteClusters", []),
+                                "xdcrTasks": result.get("xdcrTasks", []),
+                                "error": result.get("error"),
+                            }
+                        )
+
+                    cluster_index += 1
+
+            return results
+
+        result = loop.run_until_complete(fetch_all_xdcr_status())
+        loop.close()
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in get_xdcr_status: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 
