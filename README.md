@@ -33,6 +33,37 @@ A Python web application that monitors multiple Couchbase clusters with real-tim
 - **Tabbed Navigation**: Organized data display across Nodes, Buckets, Stats, XDCR, and Charts
 - **Error Resilience**: Clear error reporting for failed connections without blocking other clusters
 
+## Executables
+
+If you don't want to build from source and want an easy executable click here: [Releases (Download)](https://github.com/Fujio-Turner/cb_quick_dashboard/releases/)
+
+
+### How to Run the Executable
+
+1. After you Download the zip file and Unzip it.
+2. Update the `config.json` with your cluster(s)  credentials and save.
+3. Open a terminal `cd` into the folder
+4. Run by `./cb_dashboard`
+
+#### OUTPUT
+```shell
+# cb_dashboard-macos% ./cb_dashboard
+2025-07-20 09:51:22,205 - __main__ - INFO - Couchbase Dashboard v2.1.0 starting up
+2025-07-20 09:51:22,205 - __main__ - INFO - Logging configured: level=INFO, file=logs/app.log, enabled=True
+Couchbase Dashboard v2.1.0
+2025-07-20 09:51:22,205 - __main__ - INFO - Starting Flask server on port 5000 (debug=False)
+ * Serving Flask app 'app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5000
+Press CTRL+C to quit
+127.0.0.1 - - [26/Jul/2025 09:52:50] "GET / HTTP/1.1" 200 -
+```
+
+5. Open your browser and go to: [http://127.0.0.1:5000](http://127.0.0.1:5000)
+
+
+
 ## Installation
 
 1. Clone the repository:
