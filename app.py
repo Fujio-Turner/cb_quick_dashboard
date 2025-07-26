@@ -254,39 +254,49 @@ async def fetch_xdcr_data(session, host, user, password):
         # Fetch remote clusters
         remote_clusters_url = f"{host}/pools/default/remoteClusters"
         tasks_url = f"{host}/pools/default/tasks"
-        
+
         # Fetch both endpoints concurrently
         async with session.get(
-            remote_clusters_url, auth=aiohttp.BasicAuth(user, password), timeout=10, ssl=ssl_context
+            remote_clusters_url,
+            auth=aiohttp.BasicAuth(user, password),
+            timeout=10,
+            ssl=ssl_context,
         ) as remote_clusters_response, session.get(
-            tasks_url, auth=aiohttp.BasicAuth(user, password), timeout=10, ssl=ssl_context
+            tasks_url,
+            auth=aiohttp.BasicAuth(user, password),
+            timeout=10,
+            ssl=ssl_context,
         ) as tasks_response:
-            
+
             remote_clusters_data = []
             xdcr_tasks_data = []
             errors = []
-            
+
             # Process remote clusters response
             if remote_clusters_response.status == 200:
                 remote_clusters_data = await remote_clusters_response.json()
             else:
-                errors.append(f"Remote clusters failed with status {remote_clusters_response.status}")
-            
+                errors.append(
+                    f"Remote clusters failed with status {remote_clusters_response.status}"
+                )
+
             # Process tasks response
             if tasks_response.status == 200:
                 all_tasks = await tasks_response.json()
                 # Filter for XDCR tasks only
-                xdcr_tasks_data = [task for task in all_tasks if task.get("type") == "xdcr"]
+                xdcr_tasks_data = [
+                    task for task in all_tasks if task.get("type") == "xdcr"
+                ]
             else:
                 errors.append(f"Tasks failed with status {tasks_response.status}")
-            
+
             return {
                 "host": host,
                 "remoteClusters": remote_clusters_data,
                 "xdcrTasks": xdcr_tasks_data,
                 "error": "; ".join(errors) if errors else None,
             }
-            
+
     except Exception as e:
         if logger:
             logger.error(f"Error fetching XDCR data from {host}: {str(e)}")
