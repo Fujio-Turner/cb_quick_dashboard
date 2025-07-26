@@ -6,6 +6,10 @@ A Python web application that monitors multiple Couchbase clusters with real-tim
 
 ![Cluster Details](img/CouchBase_2.png)
 
+
+##### Version 2.1.0
+
+
 ## Features
 
 ### Core Functionality
@@ -20,12 +24,13 @@ A Python web application that monitors multiple Couchbase clusters with real-tim
 - **Operations Metrics**: Detailed command tracking (cmd_gets, cmd_sets, delete_hits, cas_hits, lookup_hits, increment_hits, decrement_hits)
 - **Miss Analytics**: Comprehensive miss tracking for all operation types
 - **Bucket Management**: Memory allocation, quota usage, eviction policies, and durability settings
+- **XDCR Monitoring**: Cross-datacenter replication status, operations tracking, and error monitoring
 - **System Statistics**: Human-readable formatting with automatic unit conversion (MB/GB, percentages)
 
 ### Interactive Interface
 - **Draggable Cards**: Reorder clusters via drag-and-drop
 - **Responsive Charts**: Real-time visualization of operations and system metrics using Chart.js
-- **Tabbed Navigation**: Organized data display across Nodes, Buckets, Stats, and Charts
+- **Tabbed Navigation**: Organized data display across Nodes, Buckets, Stats, XDCR, and Charts
 - **Error Resilience**: Clear error reporting for failed connections without blocking other clusters
 
 ## Installation
@@ -43,22 +48,33 @@ pip install -r requirements.txt
 
 3. Configure your clusters in `config.json`:
 ```json
-[
-    {
-        "host": "http://127.0.0.1:8091",
-        "user": "Administrator",
-        "pass": "password",
-        "customName": "Local Development",
-        "watch":true
+{
+    "server": {
+        "port": 5000,
+        "debug": false
     },
-    {
-        "host": "http://production.example.com:8091",
-        "user": "Administrator",
-        "pass": "secure_password",
-        "customName": "Production Cluster",
-        "watch":false
-    }
-]
+    "logging": {
+        "level": "info",
+        "file": "logs/app.log",
+        "enabled": true
+    },
+    "clusters": [
+                {
+                    "host": "http://127.0.0.1:8091",
+                    "user": "Administrator",
+                    "pass": "password",
+                    "customName": "Local Development",
+                    "watch":true
+                },
+                {
+                    "host": "http://production.example.com:8091",
+                    "user": "Administrator",
+                    "pass": "secure_password",
+                    "customName": "Production Cluster",
+                    "watch":false
+                }
+                ]
+}
 ```
 
 4. Run the application:
@@ -71,11 +87,29 @@ python app.py
 ## Configuration
 
 ### config.json Structure
-Each cluster configuration supports:
-- `host`: Couchbase cluster URL (required)
-- `user`: Authentication username (required)
-- `pass`: Authentication password (required)
-- `customName`: Friendly display name (optional)
+
+The configuration file contains three main sections:
+
+#### Server Configuration
+- **`server.port`**: Port number for the Flask web server (default: 5000)
+- **`server.debug`**: Enable Flask debug mode for development (boolean, default: false)
+
+#### Logging Configuration  
+- **`logging.level`**: Log level for application messages (options: "debug", "info", "warning", "error")
+- **`logging.file`**: Path to log file for persistent logging (creates directory if needed)
+- **`logging.enabled`**: Enable/disable file logging (boolean, set false for console-only logging)
+
+#### Cluster Configuration
+Each cluster in the `clusters` array supports:
+- **`host`**: Couchbase cluster URL with protocol and port (required)
+  - Format: `http://hostname:port` or `https://hostname:port`
+  - Standard Couchbase port is 8091
+- **`user`**: Authentication username for cluster access (required)
+- **`pass`**: Authentication password for cluster access (required)  
+- **`customName`**: Friendly display name shown in dashboard (optional)
+  - If not provided, uses the hostname from the URL
+- **`watch`**: Enable/disable monitoring for this specific cluster (boolean, optional, default: true)
+  - Set to `false` to temporarily disable monitoring without removing cluster configuration
 
 ### Timeout Settings
 - **Cluster timeout**: 15 seconds per cluster
@@ -87,6 +121,7 @@ Each cluster configuration supports:
 - `GET /` - Main dashboard page
 - `GET /api/clusters` - JSON API for all cluster data
 - `GET /api/bucket/<cluster_host>/<bucket_name>/stats` - Detailed bucket statistics
+- `GET /api/xdcrStatus` - XDCR status and metrics for all clusters
 
 ## Dashboard Tabs
 
@@ -107,11 +142,18 @@ Each cluster configuration supports:
 - **Percentage indicators**: All rates and ratios display with % symbols
 - **System metrics**: CPU, memory, and network statistics
 
+### XDCR Tab
+- **Replication Status**: Real-time monitoring of cross-datacenter replication tasks
+- **Operations Tracking**: XDCR operations per second and cumulative metrics
+- **Error Monitoring**: XDCR error rates and failure analysis
+- **Remote Cluster Management**: Status of remote cluster connections
+
 ### Data Charts Tab
 - **Operations Charts**: Real-time tracking of all command types and their corresponding misses
 - **Memory State**: Usage, watermarks, and swap statistics
 - **Disk Analytics**: Size, fragmentation, commit operations, and queue statistics
 - **Performance Metrics**: Connections, CPU utilization, and resident ratios
+- **XDCR Charts**: Operations and error visualization for replication monitoring
 
 ## Technical Architecture
 
@@ -168,3 +210,30 @@ The application provides detailed logging for:
 - Authentication failures
 - Bucket access errors
 - API response issues
+
+## Release Notes
+
+### Version 2.1.0 - XDCR Monitoring Release
+
+#### 🚀 New Features
+- **XDCR Tab**: Complete cross-datacenter replication monitoring
+  - Real-time XDCR task status tracking
+  - Operations per second metrics for replication streams
+  - Error rate monitoring and failure analysis
+  - Remote cluster connection status
+- **Enhanced API**: New `/api/xdcrStatus` endpoint for XDCR metrics
+- **Visual Charts**: XDCR operations and error visualization in Data Charts tab
+
+#### 🔧 Improvements
+- Extended tabbed navigation to include XDCR monitoring
+- Comprehensive XDCR data collection from remote clusters and tasks endpoints
+- Async XDCR data fetching for optimal performance
+- Error handling and timeout management for XDCR operations
+
+#### 📋 Technical Details
+- XDCR task filtering for focused monitoring
+- Integration with existing timeout and error handling systems
+- Responsive chart rendering for XDCR metrics
+- JSON API support for external XDCR monitoring tools
+
+### Previous Releases
