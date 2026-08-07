@@ -543,3 +543,21 @@ body {
     background-color: #721c24;
     color: white;
 }
+
+/* Data Charts controls */
+.chart-controls-row label {
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+    font-weight: 600;
+}
+
+.chart-controls-row .time-window-selector {
+    min-width: 8rem;
+}
+
+#chart-history-status-0,
+.chart-controls-row [id^="chart-history-status-"] {
+    font-size: 0.75rem;
+    line-height: 1.3;
+}
+

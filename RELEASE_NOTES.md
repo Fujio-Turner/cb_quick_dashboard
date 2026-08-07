@@ -230,6 +230,21 @@ Use this file for future ships. Newest first.
 
 See `IMPROVEMENT_PLAN.md` phases A–F and optional training track.
 
+### 1.2.0 — Chart history 1–30 minutes (2026-08-07)
+
+#### Added
+- Client-side rolling history for bucket stats samples (`static/js/chart_history.js`)
+  - Merges each 10s poll by timestamp; retains up to **30 minutes**
+  - **Time range** dropdown on Data Charts: **1–30 minutes**
+  - Preference saved in `localStorage`
+  - Status line: points stored / window shown
+- Jest tests: `tests/test_chart_history.js`
+
+#### Changed
+- Charts render from history window (not only the last ~60s Couchbase minute zoom)
+- X-axis tick auto-skip for longer ranges
+- Version **1.2.0**
+
 ### 1.1.0 — Configurable listen host/port (2026-08-07)
 
 #### Added

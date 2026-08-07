@@ -3,6 +3,91 @@ $(document).ready(function () {
   let charts = {};
   let isInitialized = false;
 
+  // Chart time-window state (1–30 minutes); history retained up to 30m via ChartHistory
+  const CH =
+    typeof ChartHistory !== "undefined"
+      ? ChartHistory
+      : {
+          MAX_RETENTION_MINUTES: 30,
+          DEFAULT_WINDOW_MINUTES: 5,
+          clampWindowMinutes: (m) => Math.min(30, Math.max(1, parseInt(m, 10) || 5)),
+          historyKey: (c, b) => `${c}::${b}`,
+          ingestSamples: () => ({ added: 0, size: 0 }),
+          getWindowSamples: (_k, _m) => ({ timestamp: [] }),
+          getBufferStats: () => ({ points: 0, spanMinutes: 0 }),
+          formatTimeLabels: (ts) =>
+            (ts || []).map((t) => new Date(t).toLocaleTimeString()),
+          loadSavedWindowMinutes: () => 5,
+          saveWindowMinutes: () => {},
+          windowOptionsHtml: () => "",
+        };
+
+  let chartWindowMinutes = CH.loadSavedWindowMinutes();
+
+  function clusterHistoryId(cluster) {
+    return cluster.clusterUUID || cluster.host || "unknown";
+  }
+
+  function ingestClusterBucketHistory(clusters) {
+    (clusters || []).forEach((cluster) => {
+      if (cluster.not_watching || cluster.error) return;
+      const cid = clusterHistoryId(cluster);
+      (cluster.bucket_stats || []).forEach((bs) => {
+        const samples = bs && bs.stats && bs.stats.op && bs.stats.op.samples;
+        if (!samples || !bs.name) return;
+        CH.ingestSamples(CH.historyKey(cid, bs.name), samples);
+      });
+    });
+  }
+
+  function getSelectedWindowMinutes(clusterIndex) {
+    const $el = $(`#time-window-${clusterIndex}`);
+    if ($el.length) {
+      return CH.clampWindowMinutes($el.val());
+    }
+    return chartWindowMinutes;
+  }
+
+  function resolveChartSamples(cluster, bucketStat, clusterIndex) {
+    const key = CH.historyKey(clusterHistoryId(cluster), bucketStat.name);
+    // Ensure latest poll is merged even if global ingest missed this path
+    const raw =
+      bucketStat.stats && bucketStat.stats.op && bucketStat.stats.op.samples;
+    if (raw) {
+      CH.ingestSamples(key, raw);
+    }
+    const mins = getSelectedWindowMinutes(clusterIndex);
+    const samples = CH.getWindowSamples(key, mins);
+    // Fallback to raw minute window if history empty (first paint race)
+    if (
+      (!samples.timestamp || samples.timestamp.length === 0) &&
+      raw &&
+      raw.timestamp &&
+      raw.timestamp.length
+    ) {
+      return raw;
+    }
+    return samples;
+  }
+
+  function updateHistoryStatus(cluster, bucketStat, clusterIndex) {
+    const key = CH.historyKey(clusterHistoryId(cluster), bucketStat.name);
+    const stats = CH.getBufferStats(key);
+    const mins = getSelectedWindowMinutes(clusterIndex);
+    const $status = $(`#chart-history-status-${clusterIndex}`);
+    if (!$status.length) return;
+    if (!stats.points) {
+      $status.text(
+        `History: collecting… (shows up to ${mins} min; keeps ${CH.MAX_RETENTION_MINUTES} min)`
+      );
+      return;
+    }
+    const span = stats.spanMinutes != null ? stats.spanMinutes.toFixed(1) : "0";
+    $status.text(
+      `History: ${stats.points} points (~${span} min stored) · showing last ${mins} min · max ${CH.MAX_RETENTION_MINUTES} min`
+    );
+  }
+
   function getHealthBadgeClass(cluster) {
     if (cluster.not_watching) {
       return "badge-warning"; // Yellow for not watching
@@ -33,6 +118,8 @@ $(document).ready(function () {
       method: "GET",
       success: function (clusters) {
         clustersData = clusters;
+        // Merge bucket stats into rolling 30-minute client history on every poll
+        ingestClusterBucketHistory(clusters);
         if (!isInitialized) {
           initializeClusters(clusters);
           isInitialized = true;
@@ -1468,8 +1555,8 @@ $(document).ready(function () {
     }
 
     let html = `
-            <div class="row mb-3">
-                <div class="col-md-4">
+            <div class="row mb-3 align-items-end chart-controls-row">
+                <div class="col-md-3 col-lg-2">
                     <label for="bucket-select-${index}">Select Bucket:</label>
                     <select id="bucket-select-${index}" class="form-control bucket-selector" data-cluster-index="${index}">
                         ${cluster.bucket_stats
@@ -1482,13 +1569,20 @@ $(document).ready(function () {
                           .join("")}
                     </select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3 col-lg-2">
+                    <label for="time-window-${index}">Time range:</label>
+                    <select id="time-window-${index}" class="form-control time-window-selector" data-cluster-index="${index}" title="Chart window (history builds up to ${CH.MAX_RETENTION_MINUTES} minutes via 10s polls)">
+                        ${CH.windowOptionsHtml(chartWindowMinutes)}
+                    </select>
+                </div>
+                <div class="col-md-3 col-lg-3">
                     <div class="selected-bucket-info" id="bucket-info-${index}">
                         <h5 class="mb-0" id="bucket-title-${index}"></h5>
                         <small class="text-muted" id="bucket-details-${index}"></small>
+                        <div class="text-muted small mt-1" id="chart-history-status-${index}"></div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label>Chart Scale:</label>
                     <div class="btn-group btn-group-toggle" data-toggle="buttons" id="scale-toggle-${index}">
                         <label class="btn btn-outline-secondary btn-sm active">
@@ -1501,7 +1595,7 @@ $(document).ready(function () {
                 </div>
                 <div class="col-md-1">
                     <label>&nbsp;</label>
-                    <button class="btn btn-outline-primary btn-sm btn-block refresh-charts" data-cluster-index="${index}">
+                    <button class="btn btn-outline-primary btn-sm btn-block refresh-charts" data-cluster-index="${index}" title="Redraw charts from history">
                         🔄 Refresh
                     </button>
                 </div>
@@ -1656,7 +1750,28 @@ $(document).ready(function () {
       .on("change", function () {
         const selectedBucketIndex = parseInt($(this).val());
         console.log("🔄 Bucket selector changed to:", selectedBucketIndex);
-        loadBucketCharts(cluster, clusterIndex, selectedBucketIndex);
+        loadBucketCharts(
+          clustersData[clusterIndex] || cluster,
+          clusterIndex,
+          selectedBucketIndex
+        );
+      });
+
+    // Time range (1–30 minutes) — redraw from client history buffer
+    $(`#time-window-${clusterIndex}`)
+      .off("change")
+      .on("change", function () {
+        chartWindowMinutes = CH.clampWindowMinutes($(this).val());
+        CH.saveWindowMinutes(chartWindowMinutes);
+        // Keep other cluster selectors in sync
+        $(".time-window-selector").val(String(chartWindowMinutes));
+        const selectedBucketIndex =
+          parseInt($(`#bucket-select-${clusterIndex}`).val()) || 0;
+        loadBucketCharts(
+          clustersData[clusterIndex] || cluster,
+          clusterIndex,
+          selectedBucketIndex
+        );
       });
 
     // Initialize scale toggle change event
@@ -1713,19 +1828,10 @@ $(document).ready(function () {
       return;
     }
 
-    const samples = bucketStat.stats.op.samples;
+    const samples = resolveChartSamples(cluster, bucketStat, clusterIndex);
     const timestamps = samples.timestamp || [];
-
-    // Convert timestamps to human-readable time format (HH:MM:SS)
-    const timeLabels = timestamps.map((ts) => {
-      const date = new Date(ts); // Timestamps are already in milliseconds
-      return date.toLocaleTimeString("en-US", {
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-    });
+    const timeLabels = CH.formatTimeLabels(timestamps);
+    updateHistoryStatus(cluster, bucketStat, clusterIndex);
 
     // Update bucket info
     $(`#bucket-title-${clusterIndex}`).text(
@@ -2713,6 +2819,11 @@ $(document).ready(function () {
         title: {
           display: false,
         },
+        ticks: {
+          maxTicksLimit: 12,
+          autoSkip: true,
+          maxRotation: 0,
+        },
       },
       y: {
         display: true,
@@ -2829,17 +2940,10 @@ $(document).ready(function () {
       return;
     }
 
-    const samples = bucketStat.stats.op.samples;
+    const samples = resolveChartSamples(cluster, bucketStat, clusterIndex);
     const timestamps = samples.timestamp || [];
-    const timeLabels = timestamps.map((ts) => {
-      const date = new Date(ts); // Timestamps are already in milliseconds
-      return date.toLocaleTimeString("en-US", {
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-    });
+    const timeLabels = CH.formatTimeLabels(timestamps);
+    updateHistoryStatus(cluster, bucketStat, clusterIndex);
 
     // Update each chart type
     const chartKeys = [

@@ -551,7 +551,8 @@ Update `RELEASE_NOTES.md` on every ship (newest section first).
 - [ ] E1–E4  
 - [ ] F* optional  
 - [ ] Phase T training (external doc)
-- [ ] Chart history retention (30 min) — product ask; not yet scheduled in A–F table
+- [x] Chart history retention (30 min) — product ask; not yet scheduled in A–F table
+  - Implemented in v1.2.0: 10s poll merge, UI window 1–30 min
 
 ---
 

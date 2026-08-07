@@ -7,7 +7,7 @@ A Python web application that monitors multiple Couchbase clusters with real-tim
 ![Cluster Details](img/CouchBase_2.png)
 
 
-##### Version 1.1.0 (see `RELEASE_NOTES.md`)
+##### Version 1.2.0 (see `RELEASE_NOTES.md`)
 
 **Planning / release docs:** [RELEASE_NOTES.md](RELEASE_NOTES.md) (1.0 baseline catalog) · [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) (phased hardening & port config roadmap)
 
@@ -198,6 +198,7 @@ Each cluster in the `clusters` array supports:
 
 ### Data Charts Tab
 - **Operations Charts**: Real-time tracking of all command types and their corresponding misses
+- **Time range selector (1–30 minutes)**: Client-side history builds from 10s polls (keeps up to 30 minutes); pick the window to display
 - **Memory State**: Usage, watermarks, and swap statistics
 - **Disk Analytics**: Size, fragmentation, commit operations, and queue statistics
 - **Performance Metrics**: Connections, CPU utilization, and resident ratios
