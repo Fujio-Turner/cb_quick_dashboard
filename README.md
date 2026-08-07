@@ -198,7 +198,7 @@ Each cluster in the `clusters` array supports:
 
 ### Data Charts Tab
 - **Operations Charts**: Real-time tracking of all command types and their corresponding misses
-- **Time range selector (1–30 minutes)**: Client-side history builds from 10s polls (keeps up to 30 minutes); pick the window to display
+- **Time range selector (1 / 5 / 15 / 30 minutes)**: Client-side history builds from 10s polls (keeps up to 30 minutes); pick the window to display
 - **Memory State**: Usage, watermarks, and swap statistics
 - **Disk Analytics**: Size, fragmentation, commit operations, and queue statistics
 - **Performance Metrics**: Connections, CPU utilization, and resident ratios

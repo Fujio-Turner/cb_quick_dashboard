@@ -235,7 +235,7 @@ See `IMPROVEMENT_PLAN.md` phases A–F and optional training track.
 #### Added
 - Client-side rolling history for bucket stats samples (`static/js/chart_history.js`)
   - Merges each 10s poll by timestamp; retains up to **30 minutes**
-  - **Time range** dropdown on Data Charts: **1–30 minutes**
+  - **Time range** dropdown on Data Charts: **1 / 5 / 15 / 30 minutes**
   - Preference saved in `localStorage`
   - Status line: points stored / window shown
 - Jest tests: `tests/test_chart_history.js`

@@ -9,14 +9,21 @@ describe("ChartHistory", () => {
     ChartHistory.clear();
   });
 
-  test("clampWindowMinutes bounds 1..30", () => {
+  test("clampWindowMinutes snaps to 1, 5, 15, 30", () => {
+    expect(ChartHistory.WINDOW_OPTIONS).toEqual([1, 5, 15, 30]);
     expect(ChartHistory.clampWindowMinutes(0)).toBe(1);
     expect(ChartHistory.clampWindowMinutes(-5)).toBe(1);
     expect(ChartHistory.clampWindowMinutes(1)).toBe(1);
+    expect(ChartHistory.clampWindowMinutes(5)).toBe(5);
     expect(ChartHistory.clampWindowMinutes(15)).toBe(15);
     expect(ChartHistory.clampWindowMinutes(30)).toBe(30);
     expect(ChartHistory.clampWindowMinutes(99)).toBe(30);
-    expect(ChartHistory.clampWindowMinutes("12")).toBe(12);
+    // nearest-option snap for legacy localStorage values
+    expect(ChartHistory.clampWindowMinutes(3)).toBe(1);
+    expect(ChartHistory.clampWindowMinutes(7)).toBe(5);
+    expect(ChartHistory.clampWindowMinutes(12)).toBe(15);
+    expect(ChartHistory.clampWindowMinutes(20)).toBe(15);
+    expect(ChartHistory.clampWindowMinutes(25)).toBe(30);
     expect(ChartHistory.clampWindowMinutes("nope")).toBe(
       ChartHistory.DEFAULT_WINDOW_MINUTES
     );
@@ -102,12 +109,17 @@ describe("ChartHistory", () => {
     expect(one.timestamp.length).toBe(2);
   });
 
-  test("windowOptionsHtml includes 1..30 and selected", () => {
-    const html = ChartHistory.windowOptionsHtml(10);
+  test("windowOptionsHtml is 1, 5, 15, 30 with selected", () => {
+    const html = ChartHistory.windowOptionsHtml(15);
     expect(html).toContain('value="1"');
+    expect(html).toContain('value="5"');
+    expect(html).toContain('value="15" selected');
     expect(html).toContain('value="30"');
-    expect(html).toContain('value="10" selected');
-    expect((html.match(/<option/g) || []).length).toBe(30);
+    expect(html).not.toContain('value="10"');
+    expect((html.match(/<option/g) || []).length).toBe(4);
+    // legacy 10 snaps selected to 5
+    const htmlSnap = ChartHistory.windowOptionsHtml(10);
+    expect(htmlSnap).toContain('value="5" selected');
   });
 
   test("formatTimeLabels produces HH:MM:SS style strings", () => {

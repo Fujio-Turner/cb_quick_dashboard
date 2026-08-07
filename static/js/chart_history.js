@@ -3,7 +3,7 @@
  *
  * Couchbase /stats default zoom returns ~60s at 1s resolution. This module
  * merges successive polls (by timestamp) and retains up to 30 minutes so the
- * UI can render selectable windows from 1–30 minutes.
+ * UI can render selectable windows: 1, 5, 15, or 30 minutes.
  *
  * Works in browser (window.ChartHistory) and Node/Jest (module.exports).
  */
@@ -13,6 +13,8 @@
   var MAX_RETENTION_MINUTES = 30;
   var MAX_RETENTION_MS = MAX_RETENTION_MINUTES * 60 * 1000;
   var DEFAULT_WINDOW_MINUTES = 5;
+  /** Allowed UI window choices (minutes). */
+  var WINDOW_OPTIONS = [1, 5, 15, 30];
   var STORAGE_KEY = "cb_dashboard_chart_window_minutes";
 
   /** @type {Map<string, Map<number, Object>>} */
@@ -21,11 +23,21 @@
   function clampWindowMinutes(minutes) {
     var n = parseInt(minutes, 10);
     if (isNaN(n)) {
-      n = DEFAULT_WINDOW_MINUTES;
+      return DEFAULT_WINDOW_MINUTES;
     }
-    if (n < 1) n = 1;
-    if (n > MAX_RETENTION_MINUTES) n = MAX_RETENTION_MINUTES;
-    return n;
+    // Snap to nearest allowed option (exact match preferred)
+    var best = WINDOW_OPTIONS[0];
+    var bestDist = Math.abs(n - best);
+    for (var i = 1; i < WINDOW_OPTIONS.length; i++) {
+      var opt = WINDOW_OPTIONS[i];
+      if (opt === n) return opt;
+      var d = Math.abs(n - opt);
+      if (d < bestDist) {
+        best = opt;
+        bestDist = d;
+      }
+    }
+    return best;
   }
 
   function normalizeTimestamp(ts) {
@@ -208,7 +220,8 @@
   function windowOptionsHtml(selectedMinutes) {
     var sel = clampWindowMinutes(selectedMinutes);
     var parts = [];
-    for (var m = 1; m <= MAX_RETENTION_MINUTES; m++) {
+    for (var i = 0; i < WINDOW_OPTIONS.length; i++) {
+      var m = WINDOW_OPTIONS[i];
       parts.push(
         '<option value="' +
           m +
@@ -227,6 +240,7 @@
     MAX_RETENTION_MINUTES: MAX_RETENTION_MINUTES,
     MAX_RETENTION_MS: MAX_RETENTION_MS,
     DEFAULT_WINDOW_MINUTES: DEFAULT_WINDOW_MINUTES,
+    WINDOW_OPTIONS: WINDOW_OPTIONS,
     STORAGE_KEY: STORAGE_KEY,
     clampWindowMinutes: clampWindowMinutes,
     normalizeTimestamp: normalizeTimestamp,
