@@ -533,49 +533,48 @@ $(document).ready(function () {
     const formatValue = (key, value) => {
       if (typeof value !== "number") return value;
 
-      // Memory and Disk-related stats (convert to appropriate units)
-      if (
-        key.includes("mem") ||
-        key.includes("memory") ||
-        key.includes("swap") ||
-        key.includes("disk") ||
-        key.includes("storage") ||
-        key.includes("hdd")
-      ) {
-        // For very large values (> 1TB), show in TB
-        if (value > 1024 * 1024 * 1024 * 1024) {
-          return `${(value / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`;
-        }
-        // For large values (> 1GB), show in GB
-        else if (value > 1024 * 1024 * 1024) {
-          return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-        }
-        // For medium values (> 1MB), show in MB
-        else if (value > 1024 * 1024) {
-          return `${(value / (1024 * 1024)).toFixed(2)} MB`;
-        }
-        // For small values (> 1KB), show in KB
-        else if (value > 1024) {
-          return `${(value / 1024).toFixed(2)} KB`;
-        }
-        // For very small values, show in bytes
-        else {
-          return `${value.toFixed(0)} bytes`;
-        }
-      }
+      const lowerKey = key.toLowerCase();
 
-      // Percentage-related stats
+      // Percentage-related stats first (keys like memory_ratio / disk_percent
+      // also match mem/disk and must not be treated as byte sizes)
       if (
-        key.includes("rate") ||
-        key.includes("ratio") ||
-        key.includes("percent") ||
-        key.includes("utilization")
+        lowerKey.includes("rate") ||
+        lowerKey.includes("ratio") ||
+        lowerKey.includes("percent") ||
+        lowerKey.includes("utilization")
       ) {
         return `${value.toFixed(2)}%`;
       }
 
+      // Memory and Disk-related stats (convert to appropriate units)
+      if (
+        lowerKey.includes("mem") ||
+        lowerKey.includes("memory") ||
+        lowerKey.includes("swap") ||
+        lowerKey.includes("disk") ||
+        lowerKey.includes("storage") ||
+        lowerKey.includes("hdd")
+      ) {
+        const TB = 1024 * 1024 * 1024 * 1024;
+        const GB = 1024 * 1024 * 1024;
+        const MB = 1024 * 1024;
+        const KB = 1024;
+        // Inclusive thresholds so exact 1GB/1TB label correctly
+        if (value >= TB) {
+          return `${(value / TB).toFixed(2)} TB`;
+        } else if (value >= GB) {
+          return `${(value / GB).toFixed(2)} GB`;
+        } else if (value >= MB) {
+          return `${(value / MB).toFixed(2)} MB`;
+        } else if (value >= KB) {
+          return `${(value / KB).toFixed(2)} KB`;
+        } else {
+          return `${value.toFixed(0)} bytes`;
+        }
+      }
+
       // Time-related stats (convert seconds to appropriate units)
-      if (key.includes("time") && value > 60) {
+      if (lowerKey.includes("time") && value > 60) {
         const minutes = Math.floor(value / 60);
         const seconds = (value % 60).toFixed(1);
         return `${minutes}m ${seconds}s`;
