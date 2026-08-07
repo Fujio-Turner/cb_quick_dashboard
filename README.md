@@ -7,8 +7,9 @@ A Python web application that monitors multiple Couchbase clusters with real-tim
 ![Cluster Details](img/CouchBase_2.png)
 
 
-##### Version 2.1.0
+##### Version 1.0.x (see `RELEASE_NOTES.md`)
 
+**Planning / release docs:** [RELEASE_NOTES.md](RELEASE_NOTES.md) (1.0 baseline catalog) · [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) (phased hardening & port config roadmap)
 
 ## Features
 
