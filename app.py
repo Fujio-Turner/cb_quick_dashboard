@@ -3,14 +3,16 @@ import asyncio
 import json
 import ssl
 import os
-from flask import Flask, render_template, jsonify
+import tempfile
+from copy import deepcopy
+from flask import Flask, render_template, jsonify, request
 import logging
 from logging.handlers import RotatingFileHandler
 
 # Version information
 # 🤖 AI ASSISTANT HINT: Please increment this version number on every significant update/save
 # Use semantic versioning: MAJOR.MINOR.PATCH (e.g., 1.0.0 -> 1.0.1 for fixes, 1.1.0 for features)
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 app = Flask(__name__)
 
@@ -22,6 +24,10 @@ logger = None
 DEFAULT_SERVER_HOST = "127.0.0.1"
 DEFAULT_SERVER_PORT = 5050
 DEFAULT_SERVER_DEBUG = False
+DEFAULT_POLL_INTERVAL_SECONDS = 10
+MIN_POLL_INTERVAL_SECONDS = 5
+MAX_POLL_INTERVAL_SECONDS = 300
+PASSWORD_PLACEHOLDER = "********"
 
 
 # Utility functions
@@ -673,6 +679,22 @@ def validate_config(config_data):
                 server_config.get("debug"), bool
             ):
                 errors.append("'server.debug' must be a boolean")
+            if "poll_interval_seconds" in server_config:
+                try:
+                    poll = int(server_config["poll_interval_seconds"])
+                    if not (
+                        MIN_POLL_INTERVAL_SECONDS
+                        <= poll
+                        <= MAX_POLL_INTERVAL_SECONDS
+                    ):
+                        errors.append(
+                            f"'server.poll_interval_seconds' must be "
+                            f"{MIN_POLL_INTERVAL_SECONDS}-{MAX_POLL_INTERVAL_SECONDS}"
+                        )
+                except (TypeError, ValueError):
+                    errors.append(
+                        "'server.poll_interval_seconds' must be an integer"
+                    )
 
     # Validate clusters section
     if "clusters" not in config_data:
@@ -708,12 +730,106 @@ def validate_config(config_data):
     return errors
 
 
+def get_config_path():
+    """Resolve path to config.json (env override or CWD)."""
+    return os.environ.get("CB_DASHBOARD_CONFIG", "config.json")
+
+
+def read_config_file():
+    """Read full config object from disk (no validation)."""
+    path = get_config_path()
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def write_config_file(config_data):
+    """Validate and atomically write config.json."""
+    errors = validate_config(config_data)
+    if errors:
+        raise ValueError("; ".join(errors))
+
+    path = get_config_path()
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp_path = tempfile.mkstemp(prefix=".config.", suffix=".json", dir=directory)
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(config_data, f, indent=4)
+            f.write("\n")
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+    global config
+    config = config_data
+    return config_data
+
+
+def mask_config_for_api(config_data):
+    """Return a copy safe for the UI: passwords replaced with placeholder."""
+    data = deepcopy(config_data) if config_data else {}
+    clusters = data.get("clusters") or []
+    for cluster in clusters:
+        if not isinstance(cluster, dict):
+            continue
+        has_pass = bool(cluster.get("pass"))
+        cluster["has_password"] = has_pass
+        if has_pass:
+            cluster["pass"] = PASSWORD_PLACEHOLDER
+        else:
+            cluster["pass"] = ""
+    return data
+
+
+def merge_config_passwords(incoming, existing):
+    """Keep existing passwords when UI sends the placeholder or empty string."""
+    merged = deepcopy(incoming)
+    old_by_host = {}
+    for c in existing.get("clusters") or []:
+        if isinstance(c, dict) and c.get("host"):
+            old_by_host[c["host"]] = c
+
+    for cluster in merged.get("clusters") or []:
+        if not isinstance(cluster, dict):
+            continue
+        pwd = cluster.get("pass", "")
+        host = cluster.get("host")
+        if pwd in ("", PASSWORD_PLACEHOLDER, None):
+            prev = old_by_host.get(host) or {}
+            if prev.get("pass"):
+                cluster["pass"] = prev["pass"]
+            elif not pwd:
+                cluster["pass"] = ""
+        # drop UI-only flag
+        cluster.pop("has_password", None)
+    return merged
+
+
+def get_poll_interval_seconds(config_data=None):
+    """Poll interval for dashboard refresh (seconds)."""
+    data = config_data if config_data is not None else config
+    try:
+        if data and isinstance(data.get("server"), dict):
+            val = int(
+                data["server"].get(
+                    "poll_interval_seconds", DEFAULT_POLL_INTERVAL_SECONDS
+                )
+            )
+            if MIN_POLL_INTERVAL_SECONDS <= val <= MAX_POLL_INTERVAL_SECONDS:
+                return val
+    except (TypeError, ValueError):
+        pass
+    return DEFAULT_POLL_INTERVAL_SECONDS
+
+
 def load_config():
     """Load and validate cluster configurations from config.json."""
     global config
     try:
-        with open("config.json", "r") as f:
-            config_data = json.load(f)
+        config_data = read_config_file()
 
         # Validate configuration
         errors = validate_config(config_data)
@@ -728,21 +844,21 @@ def load_config():
         config = config_data
         return config_data["clusters"]
     except FileNotFoundError:
-        error_msg = "config.json file not found"
+        error_msg = f"config file not found: {get_config_path()}"
         if logger:
             logger.error(error_msg)
         else:
             print(error_msg)
         return []
     except json.JSONDecodeError as e:
-        error_msg = f"Invalid JSON in config.json: {str(e)}"
+        error_msg = f"Invalid JSON in config: {str(e)}"
         if logger:
             logger.error(error_msg)
         else:
             print(error_msg)
         return []
     except Exception as e:
-        error_msg = f"Error loading config.json: {str(e)}"
+        error_msg = f"Error loading config: {str(e)}"
         if logger:
             logger.error(error_msg)
         else:
@@ -926,6 +1042,175 @@ def process_cluster_data(clusters_data):
 @app.route("/")
 def index():
     return render_template("index.html", version=__version__)
+
+
+@app.route("/api/meta")
+def get_meta():
+    """Lightweight runtime settings for the UI (no secrets)."""
+    if logger is None:
+        initialize_app()
+    try:
+        cfg = read_config_file()
+    except Exception:
+        cfg = config or {}
+    server = (cfg or {}).get("server") or {}
+    return jsonify(
+        {
+            "version": __version__,
+            "poll_interval_seconds": get_poll_interval_seconds(cfg),
+            "server_host": server.get("host", DEFAULT_SERVER_HOST),
+            "server_port": server.get("port", DEFAULT_SERVER_PORT),
+            "config_path": get_config_path(),
+            "cluster_count": len((cfg or {}).get("clusters") or []),
+        }
+    )
+
+
+@app.route("/api/config", methods=["GET"])
+def api_get_config():
+    """Return config for the settings UI (passwords masked)."""
+    if logger is None:
+        initialize_app()
+    try:
+        cfg = read_config_file()
+        # ensure defaults present for UI
+        cfg.setdefault("server", {})
+        cfg["server"].setdefault("host", DEFAULT_SERVER_HOST)
+        cfg["server"].setdefault("port", DEFAULT_SERVER_PORT)
+        cfg["server"].setdefault("debug", False)
+        cfg["server"].setdefault(
+            "poll_interval_seconds", DEFAULT_POLL_INTERVAL_SECONDS
+        )
+        cfg.setdefault(
+            "logging",
+            {"level": "info", "file": "logs/app.log", "enabled": True},
+        )
+        cfg.setdefault("clusters", [])
+        return jsonify(mask_config_for_api(cfg))
+    except FileNotFoundError:
+        return jsonify({"error": f"Config not found: {get_config_path()}"}), 404
+    except Exception as e:
+        if logger:
+            logger.error(f"api_get_config: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/config", methods=["PUT", "POST"])
+def api_put_config():
+    """Save config.json from the settings UI."""
+    if logger is None:
+        initialize_app()
+    try:
+        incoming = request.get_json(force=True, silent=False)
+    except Exception:
+        return jsonify({"error": "Invalid JSON body"}), 400
+    if not isinstance(incoming, dict):
+        return jsonify({"error": "Config must be a JSON object"}), 400
+
+    try:
+        try:
+            existing = read_config_file()
+        except FileNotFoundError:
+            existing = {"clusters": []}
+        merged = merge_config_passwords(incoming, existing)
+        # strip any accidental has_password
+        for c in merged.get("clusters") or []:
+            if isinstance(c, dict):
+                c.pop("has_password", None)
+        write_config_file(merged)
+        if logger:
+            logger.info(
+                "Config saved (%s clusters, poll=%ss)",
+                len(merged.get("clusters") or []),
+                get_poll_interval_seconds(merged),
+            )
+        return jsonify(
+            {
+                "ok": True,
+                "poll_interval_seconds": get_poll_interval_seconds(merged),
+                "cluster_count": len(merged.get("clusters") or []),
+                "config": mask_config_for_api(merged),
+            }
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        if logger:
+            logger.error(f"api_put_config: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/config/test", methods=["POST"])
+def api_test_cluster():
+    """Test connectivity/auth to a single Couchbase cluster."""
+    if logger is None:
+        initialize_app()
+    body = request.get_json(force=True, silent=True) or {}
+    host = (body.get("host") or "").strip()
+    user = body.get("user") or ""
+    password = body.get("pass") or ""
+
+    if not validate_host_url(host):
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": "Host must start with http:// or https://",
+                }
+            ),
+            400,
+        )
+    if not user:
+        return jsonify({"ok": False, "error": "Username is required"}), 400
+
+    # Allow testing with stored password when placeholder sent
+    if password in ("", PASSWORD_PLACEHOLDER):
+        try:
+            existing = read_config_file()
+            for c in existing.get("clusters") or []:
+                if c.get("host") == host and c.get("pass"):
+                    password = c["pass"]
+                    break
+        except Exception:
+            pass
+    if not password:
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": "Password required (enter one or save cluster first)",
+                }
+            ),
+            400,
+        )
+
+    async def _test():
+        async with aiohttp.ClientSession() as session:
+            return await fetch_cluster_data(session, host, user, password)
+
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(_test())
+        loop.close()
+    except Exception as e:
+        return jsonify({"ok": False, "host": host, "error": str(e)}), 200
+
+    if result.get("error"):
+        return jsonify(
+            {"ok": False, "host": host, "error": result["error"]}
+        )
+    data = result.get("data") or {}
+    nodes = data.get("nodes") or []
+    return jsonify(
+        {
+            "ok": True,
+            "host": host,
+            "clusterName": data.get("clusterName") or data.get("name") or "OK",
+            "node_count": len(nodes),
+            "message": f"Connected ({len(nodes)} node(s))",
+        }
+    )
 
 
 @app.route("/api/clusters")
@@ -1145,12 +1430,17 @@ def initialize_app():
     # Load configuration first
     config_data = {}
     try:
-        with open("config.json", "r") as f:
-            config_data = json.load(f)
+        config_data = read_config_file()
     except Exception as e:
-        print(f"Error loading config.json: {str(e)}")
-        # Use default configuration if config.json fails to load
+        print(f"Error loading config: {str(e)}")
+        # Use default configuration if config fails to load
         config_data = {
+            "server": {
+                "host": DEFAULT_SERVER_HOST,
+                "port": DEFAULT_SERVER_PORT,
+                "debug": False,
+                "poll_interval_seconds": DEFAULT_POLL_INTERVAL_SECONDS,
+            },
             "logging": {"level": "info", "file": "logs/app.log", "enabled": True},
             "clusters": [],
         }

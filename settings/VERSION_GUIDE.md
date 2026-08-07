@@ -16,7 +16,7 @@ Use semantic versioning: **MAJOR.MINOR.PATCH**
 # Version information
 # 🤖 AI ASSISTANT HINT: Please increment this version number on every significant update/save
 # Use semantic versioning: MAJOR.MINOR.PATCH (e.g., 1.0.0 -> 1.0.1 for fixes, 1.1.0 for features)
-`__version__ = "1.2.0"`
+`__version__ = "1.3.0"`
 
 
 ### index.html

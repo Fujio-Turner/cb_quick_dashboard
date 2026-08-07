@@ -7,7 +7,7 @@ A Python web application that monitors multiple Couchbase clusters with real-tim
 ![Cluster Details](img/CouchBase_2.png)
 
 
-##### Version 1.2.0 (see `RELEASE_NOTES.md`)
+##### Version 1.3.0 (see `RELEASE_NOTES.md`)
 
 **Planning / release docs:** [RELEASE_NOTES.md](RELEASE_NOTES.md) (1.0 baseline catalog) · [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) (phased hardening & port config roadmap)
 
@@ -29,6 +29,8 @@ A Python web application that monitors multiple Couchbase clusters with real-tim
 - **System Statistics**: Human-readable formatting with automatic unit conversion (MB/GB, percentages)
 
 ### Interactive Interface
+- **Settings gear (upper right)**: Edit `config.json` in-browser — add/remove clusters, test connections, poll interval, logging
+
 - **Draggable Cards**: Reorder clusters via drag-and-drop
 - **Responsive Charts**: Real-time visualization of operations and system metrics using Chart.js
 - **Tabbed Navigation**: Organized data display across Nodes, Buckets, Stats, XDCR, and Charts

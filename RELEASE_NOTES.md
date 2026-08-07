@@ -230,6 +230,16 @@ Use this file for future ships. Newest first.
 
 See `IMPROVEMENT_PLAN.md` phases A–F and optional training track.
 
+### 1.3.0 — In-app config editor (2026-08-07)
+
+#### Added
+- Settings **gear icon** (upper right) opens a modal to edit `config.json`
+- Add / remove clusters, **Test** connection, watch toggle
+- **Stats poll interval** (`server.poll_interval_seconds`, 5–300s) applied live
+- Bind host/port + logging fields (host/port need process restart)
+- API: `GET/PUT /api/config`, `POST /api/config/test`, `GET /api/meta`
+- Passwords masked in UI (`********` keeps existing on save)
+
 ### 1.2.0 — Chart history 1–30 minutes (2026-08-07)
 
 #### Added

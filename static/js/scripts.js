@@ -3192,11 +3192,56 @@ $(document).ready(function () {
     });
   }
 
-  // Initial fetch
-  fetchClusters();
+  // Initial fetch + polling (interval from /api/meta / config)
+  let pollIntervalMs = 10000;
+  let pollTimer = null;
 
-  // Poll every 10 seconds
-  setInterval(fetchClusters, 10000);
+  function setPollIntervalSeconds(seconds) {
+    const sec = Math.max(5, Math.min(300, parseInt(seconds, 10) || 10));
+    pollIntervalMs = sec * 1000;
+    if (pollTimer) {
+      clearInterval(pollTimer);
+    }
+    pollTimer = setInterval(fetchClusters, pollIntervalMs);
+  }
+
+  function applyMeta(meta) {
+    if (!meta) return;
+    if (meta.poll_interval_seconds != null) {
+      setPollIntervalSeconds(meta.poll_interval_seconds);
+    }
+  }
+
+  // Settings gear UI
+  if (typeof DashboardConfigUI !== "undefined") {
+    DashboardConfigUI.init({
+      onSaved: function (info) {
+        if (info && info.poll_interval_seconds != null) {
+          setPollIntervalSeconds(info.poll_interval_seconds);
+        }
+        // Force full card rebuild so new/removed clusters appear
+        isInitialized = false;
+        window.chartsInitialized = {};
+        charts = {};
+        fetchClusters();
+      },
+    });
+  }
+
+  $.ajax({
+    url: "/api/meta",
+    method: "GET",
+    dataType: "json",
+  })
+    .done(function (meta) {
+      applyMeta(meta);
+    })
+    .always(function () {
+      fetchClusters();
+      if (!pollTimer) {
+        setPollIntervalSeconds(pollIntervalMs / 1000);
+      }
+    });
 
   // Index Charts functionality
   let indexData = {};
