@@ -1,95 +1,141 @@
 # Couchbase Cluster Dashboard
 
-A Python web application that monitors multiple Couchbase clusters with real-time updates, advanced timeout handling, and comprehensive operations metrics.
+A local Python web app for monitoring one or more Couchbase clusters — health, buckets, ops metrics, XDCR, indexes, and live charts — with timeouts so slow clusters don’t block the rest.
 
 ![Dashboard Overview](img/CouchBase_1.png)
 
 ![Cluster Details](img/CouchBase_2.png)
 
+##### Version **1.3.0** — full changelog in [RELEASE_NOTES.md](RELEASE_NOTES.md) · roadmap in [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md)
 
-##### Version 1.3.0 (see `RELEASE_NOTES.md`)
+**Default URL:** [http://127.0.0.1:5050](http://127.0.0.1:5050) (binds localhost only)
 
-**Planning / release docs:** [RELEASE_NOTES.md](RELEASE_NOTES.md) (1.0 baseline catalog) · [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) (phased hardening & port config roadmap)
+---
+
+## What’s new in 1.1 – 1.3
+
+| Version | Highlights |
+|--------|------------|
+| **1.3.0** | **Settings gear** (upper right): edit `config.json` in the browser — add/remove clusters, **Test** connection, watch toggle, poll interval, logging. APIs: `/api/config`, `/api/config/test`, `/api/meta`. |
+| **1.2.0** | **Chart history** up to 30 minutes (built from poll samples). **Time range** on Data Charts: **1 / 5 / 15 / 30** minutes. X-axis spans the full selected window. |
+| **1.1.0** | Default listen **`127.0.0.1:5050`** (avoids busy port 5000). CLI `--host` / `--port`, env `CB_DASHBOARD_HOST` / `CB_DASHBOARD_PORT`. `config.example.json`. |
+
+---
 
 ## Features
 
-### Core Functionality
-- **Multi-Cluster Monitoring**: Monitor unlimited Couchbase clusters simultaneously
-- **Custom Cluster Names**: Add friendly names to clusters alongside system names
-- **Advanced Timeout Handling**: Non-blocking requests - fast clusters display immediately without waiting for slow ones
-- **Real-time Updates**: Auto-refresh every 10 seconds with live data
-- **Async Architecture**: Concurrent requests to all clusters and buckets for optimal performance
+### Core
+- **Multi-cluster** monitoring with per-cluster `watch` on/off
+- **Custom names** via `customName`
+- **Non-blocking** async fetches (per-cluster timeouts)
+- **Configurable poll interval** (default 10s; 5–300s via settings or config)
+- **In-app config editor** (gear icon) — no need to hand-edit JSON for day-to-day cluster changes
 
-### Dashboard Views
-- **Cluster Overview**: Health status, memory/disk usage, and node information
-- **Operations Metrics**: Detailed command tracking (cmd_gets, cmd_sets, delete_hits, cas_hits, lookup_hits, increment_hits, decrement_hits)
-- **Miss Analytics**: Comprehensive miss tracking for all operation types
-- **Bucket Management**: Memory allocation, quota usage, eviction policies, and durability settings
-- **XDCR Monitoring**: Cross-datacenter replication status, operations tracking, and error monitoring
-- **System Statistics**: Human-readable formatting with automatic unit conversion (MB/GB, percentages)
+### Views
+- **Nodes** — services, health, links to Couchbase UI  
+- **Buckets** — quota, ops, eviction, durability, replicas  
+- **Stats** — human-readable system metrics  
+- **Indexes** — GSI status  
+- **XDCR** — remotes, tasks, ops/errors  
+- **Data Charts** — ops/misses, memory, disk, DCP, XDCR series + **time range** selector  
 
-### Interactive Interface
-- **Settings gear (upper right)**: Edit `config.json` in-browser — add/remove clusters, test connections, poll interval, logging
+### UI
+- Settings **gear** (upper right) next to version badge  
+- Draggable cluster cards  
+- Chart.js visualizations, bucket selector, linear/log scale  
+- Error isolation (one bad cluster doesn’t blank the dashboard)  
 
-- **Draggable Cards**: Reorder clusters via drag-and-drop
-- **Responsive Charts**: Real-time visualization of operations and system metrics using Chart.js
-- **Tabbed Navigation**: Organized data display across Nodes, Buckets, Stats, XDCR, and Charts
-- **Error Resilience**: Clear error reporting for failed connections without blocking other clusters
+---
+
+## Quick start (from source)
+
+```bash
+git clone https://github.com/Fujio-Turner/cb_quick_dashboard.git
+cd cb_quick_dashboard
+
+python3 -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+cp config.example.json config.json
+# edit clusters (or do it later via the gear UI)
+
+python app.py
+# → Open: http://127.0.0.1:5050
+```
+
+Browser: open the URL printed at startup, then use the **gear** to add clusters and **Test** credentials.
+
+### Port / host overrides
+
+Port **5000** is often taken. Defaults are **host `127.0.0.1`**, **port `5050`**.
+
+```bash
+python app.py --port 5060
+python app.py --host 127.0.0.1 --port 5080
+CB_DASHBOARD_PORT=5070 python app.py
+CB_DASHBOARD_HOST=127.0.0.1 CB_DASHBOARD_PORT=5090 python app.py
+```
+
+**Precedence:** CLI `--host` / `--port` → env `CB_DASHBOARD_HOST` / `CB_DASHBOARD_PORT` → `config.json` `server.*` → defaults.
+
+Optional: `CB_DASHBOARD_CONFIG=/path/to/config.json` to point at another file.
+
+---
 
 ## Executables
 
-If you don't want to build from source and want an easy executable click here: [Releases (Download)](https://github.com/Fujio-Turner/cb_quick_dashboard/releases/)
+Pre-built binaries: [Releases](https://github.com/Fujio-Turner/cb_quick_dashboard/releases/)
 
+1. Download and unzip for your OS  
+2. Copy/edit `config.json` (or start the app and use the gear UI)  
+3. Run `./cb_dashboard` (or `cb_dashboard.exe` on Windows)  
+4. Open **http://127.0.0.1:5050** (or the port in your config)  
 
-### How to Run the Executable
+Example startup:
 
-1. After you Download the zip file and Unzip it.
-2. Update the `config.json` with your cluster(s)  credentials and save.
-3. Open a terminal `cd` into the folder
-4. Run by `./cb_dashboard`
-
-#### OUTPUT
-```shell
-# cb_dashboard-macos% ./cb_dashboard
-2025-07-20 09:51:22,205 - __main__ - INFO - Couchbase Dashboard v2.1.0 starting up
-2025-07-20 09:51:22,205 - __main__ - INFO - Logging configured: level=INFO, file=logs/app.log, enabled=True
-Couchbase Dashboard v2.1.0
-2025-07-20 09:51:22,205 - __main__ - INFO - Starting Flask server on port 5000 (debug=False)
- * Serving Flask app 'app'
- * Debug mode: off
-WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
- * Running on http://127.0.0.1:5000
-Press CTRL+C to quit
-127.0.0.1 - - [26/Jul/2025 09:52:50] "GET / HTTP/1.1" 200 -
+```text
+Couchbase Dashboard v1.3.0
+Open: http://127.0.0.1:5050
+Listen: host=127.0.0.1 (config), port=5050 (config), debug=False (config)
+ * Running on http://127.0.0.1:5050
 ```
 
-5. Open your browser and go to: [http://127.0.0.1:5000](http://127.0.0.1:5000)
+> Flask’s built-in server is intended for **local** use, not public production.
 
+---
 
+## Configuration
 
-## Installation
+### In-browser (recommended)
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd cb_quick_dashboard
-```
+1. Open the dashboard  
+2. Click the **gear** (upper right)  
+3. Edit **Polling & server**, **Logging**, and **Clusters**  
+4. Use **Test** on a row to verify host/user/password  
+5. **Save to config.json**  
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+Notes:
+- Passwords display as `********`. Leave that value to keep the existing secret; type a new password only when changing it.  
+- **Poll interval** applies immediately after save.  
+- **Bind host/port** are written to the file but take effect on the **next process restart**.  
+- This UI is meant for a **localhost** dashboard (no login on the settings API).
 
-3. Configure your clusters in `config.json` (copy from the example if needed):
+### config.json (file)
+
+Start from the example:
+
 ```bash
 cp config.example.json config.json
 ```
+
 ```json
 {
     "server": {
         "host": "127.0.0.1",
         "port": 5050,
-        "debug": false
+        "debug": false,
+        "poll_interval_seconds": 10
     },
     "logging": {
         "level": "info",
@@ -97,194 +143,160 @@ cp config.example.json config.json
         "enabled": true
     },
     "clusters": [
-                {
-                    "host": "http://127.0.0.1:8091",
-                    "user": "Administrator",
-                    "pass": "password",
-                    "customName": "Local Development",
-                    "watch":true
-                },
-                {
-                    "host": "http://production.example.com:8091",
-                    "user": "Administrator",
-                    "pass": "secure_password",
-                    "customName": "Production Cluster",
-                    "watch":false
-                }
-                ]
+        {
+            "host": "http://127.0.0.1:8091",
+            "user": "Administrator",
+            "pass": "password",
+            "customName": "Local Development",
+            "watch": true
+        },
+        {
+            "host": "http://production.example.com:8091",
+            "user": "Administrator",
+            "pass": "secure_password",
+            "customName": "Production Cluster",
+            "watch": false
+        }
+    ]
 }
 ```
 
-4. Run the application:
+#### `server`
+| Key | Default | Description |
+|-----|---------|-------------|
+| `host` | `127.0.0.1` | Bind address (localhost-only by default) |
+| `port` | `5050` | HTTP port |
+| `debug` | `false` | Flask debug mode |
+| `poll_interval_seconds` | `10` | Dashboard refresh interval (**5–300**) |
+
+#### `logging`
+| Key | Description |
+|-----|-------------|
+| `level` | `trace` / `debug` / `info` / `warning` / `error` |
+| `file` | Log file path (directory created if needed) |
+| `enabled` | File logging on/off (console always on) |
+
+#### `clusters[]`
+| Key | Required | Description |
+|-----|----------|-------------|
+| `host` | yes | `http://` or `https://` + host + mgmt port (usually **8091**) |
+| `user` | yes | REST username |
+| `pass` | yes | REST password |
+| `customName` | no | Label in the UI |
+| `watch` | no | `true` (default) to poll; `false` shows “Not Watching” |
+
+### Timeouts (fetch)
+- ~15s per cluster  
+- ~10s per HTTP call / bucket gather  
+- Clusters fail independently  
+
+---
+
+## Data Charts & history
+
+- Each poll merges bucket stat samples into a **client-side history** (up to **30 minutes**).  
+- **Time range** control: **1 / 5 / 15 / 30** minutes.  
+- The **x-axis always spans** the selected window (even if only a short history is filled yet).  
+- Preference is stored in `localStorage`.  
+- Leave the page open to accumulate longer history; a hard refresh clears the in-memory buffer.
+
+---
+
+## API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Dashboard HTML |
+| `GET` | `/api/meta` | Version, poll interval, config path (no secrets) |
+| `GET` | `/api/config` | Full config for settings UI (passwords masked) |
+| `PUT`/`POST` | `/api/config` | Save config.json |
+| `POST` | `/api/config/test` | Test one cluster `{host,user,pass}` |
+| `GET` | `/api/clusters` | Live cluster payload for cards/charts |
+| `GET` | `/api/bucket/<host>/<bucket>/stats` | Bucket detail stats |
+| `GET` | `/api/indexStatus` | Index status (watched clusters) |
+| `GET` | `/api/xdcrStatus` | XDCR remotes + tasks |
+
+---
+
+## Dashboard tabs
+
+### Nodes
+Hostnames (links use cluster protocol/port), health, services, CPU/memory.
+
+### Buckets
+Quota, usage %, ops/sec, disk fetches, eviction, durability, replicas, backend.
+
+### Stats
+Formatted system metrics (MB/GB, percentages).
+
+### Indexes
+GSI / index status view.
+
+### XDCR
+Replication tasks, remotes, ops and error signals.
+
+### Data Charts
+Operations, misses, background ops, errors, memory/items/resident, connections/CPU, disk, DCP, XDCR — plus **time range** and chart scale (linear/log).
+
+---
+
+## Architecture
+
+| Layer | Stack |
+|-------|--------|
+| Backend | Flask + aiohttp (async fan-out to Couchbase REST) |
+| Frontend | jQuery, jQuery UI, Bootstrap 4, Chart.js |
+| Config | `config.json` (+ optional in-browser editor) |
+| History | `static/js/chart_history.js` (browser ring buffer + window grid) |
+| Settings UI | `static/js/config_ui.js` |
+
+---
+
+## Development & tests
+
 ```bash
-source venv/bin/activate   # if using the project venv
-python app.py
+source venv/bin/activate
+pip install -r requirements.txt -r requirements-test.txt
+
+# Python
+python -m pytest tests/ -q
+
+# JS (Node)
+npm install
+npm test
 ```
 
-5. Open the URL printed at startup (default **http://127.0.0.1:5050**)
-
-Port **5000** is often already used by other local tools. Defaults are **127.0.0.1:5050**. Override any time:
-
-```bash
-python app.py --port 5060
-python app.py --host 127.0.0.1 --port 5080
-CB_DASHBOARD_PORT=5070 python app.py
-```
-
-Precedence: `--port` / `--host` → env `CB_DASHBOARD_PORT` / `CB_DASHBOARD_HOST` → `config.json` `server.*` → defaults.
-
-## Configuration
-
-### config.json Structure
-
-The configuration file contains three main sections:
-
-#### Server Configuration
-- **`server.host`**: Bind address (default: `127.0.0.1` — localhost only)
-- **`server.port`**: Port for the Flask web server (default: **5050**)
-- **`server.debug`**: Enable Flask debug mode (boolean, default: false)
-
-#### Logging Configuration  
-- **`logging.level`**: Log level for application messages (options: "debug", "info", "warning", "error")
-- **`logging.file`**: Path to log file for persistent logging (creates directory if needed)
-- **`logging.enabled`**: Enable/disable file logging (boolean, set false for console-only logging)
-
-#### Cluster Configuration
-Each cluster in the `clusters` array supports:
-- **`host`**: Couchbase cluster URL with protocol and port (required)
-  - Format: `http://hostname:port` or `https://hostname:port`
-  - Standard Couchbase port is 8091
-- **`user`**: Authentication username for cluster access (required)
-- **`pass`**: Authentication password for cluster access (required)  
-- **`customName`**: Friendly display name shown in dashboard (optional)
-  - If not provided, uses the hostname from the URL
-- **`watch`**: Enable/disable monitoring for this specific cluster (boolean, optional, default: true)
-  - Set to `false` to temporarily disable monitoring without removing cluster configuration
-
-### Timeout Settings
-- **Cluster timeout**: 15 seconds per cluster
-- **Bucket operations**: 10 seconds per cluster
-- **Individual timeouts**: Each cluster operates independently
-
-## API Endpoints
-
-- `GET /` - Main dashboard page
-- `GET /api/clusters` - JSON API for all cluster data
-- `GET /api/bucket/<cluster_host>/<bucket_name>/stats` - Detailed bucket statistics
-- `GET /api/xdcrStatus` - XDCR status and metrics for all clusters
-
-## Dashboard Tabs
-
-### Nodes Tab
-- Server hostnames with direct links to Couchbase UI
-- Health status indicators
-- Service assignments (data, index, query, etc.)
-- CPU utilization and memory statistics
-
-### Buckets Tab
-- **Memory Management**: Quota allocation (MB), quota usage percentage
-- **Performance**: Operations per second, disk fetches
-- **Configuration**: Eviction policy, durability minimum level
-- **Storage**: Replica count, storage backend type
-
-### Stats Tab
-- **Human-readable formatting**: Automatic conversion to MB/GB
-- **Percentage indicators**: All rates and ratios display with % symbols
-- **System metrics**: CPU, memory, and network statistics
-
-### XDCR Tab
-- **Replication Status**: Real-time monitoring of cross-datacenter replication tasks
-- **Operations Tracking**: XDCR operations per second and cumulative metrics
-- **Error Monitoring**: XDCR error rates and failure analysis
-- **Remote Cluster Management**: Status of remote cluster connections
-
-### Data Charts Tab
-- **Operations Charts**: Real-time tracking of all command types and their corresponding misses
-- **Time range selector (1 / 5 / 15 / 30 minutes)**: Client-side history builds from 10s polls (keeps up to 30 minutes); pick the window to display
-- **Memory State**: Usage, watermarks, and swap statistics
-- **Disk Analytics**: Size, fragmentation, commit operations, and queue statistics
-- **Performance Metrics**: Connections, CPU utilization, and resident ratios
-- **XDCR Charts**: Operations and error visualization for replication monitoring
-
-## Technical Architecture
-
-### Backend (Flask + aiohttp)
-- Asynchronous request handling for optimal performance
-- Individual cluster timeout management
-- Exception handling that doesn't block other operations
-- Comprehensive error logging and reporting
-
-### Frontend (jQuery + Chart.js)
-- Real-time chart updates without page refresh
-- Responsive design with Bootstrap 4
-- Dynamic bucket selection for detailed metrics
-- Drag-and-drop cluster reordering with jQuery UI
-
-### Data Processing
-- Automatic unit conversion (bytes → MB/GB)
-- Calculated metrics (total operations from individual commands)
-- Time-series data visualization with 60-second rolling windows
-
-## Performance Features
-
-- **Non-blocking Architecture**: Fast clusters display immediately
-- **Concurrent Processing**: All API calls execute in parallel
-- **Smart Caching**: Efficient data updates without full page reloads
-- **Error Isolation**: Failed clusters don't impact others
-- **Timeout Management**: Prevents hanging on unresponsive clusters
-
-## Dependencies
-
-- **Flask 2.3.3**: Web framework
-- **aiohttp 3.9.5**: Async HTTP client for Couchbase API calls
-- **Chart.js**: Real-time data visualization
-- **jQuery UI**: Interactive interface components
-- **Bootstrap 4**: Responsive styling
-
-## Browser Compatibility
-
-Tested and supported on:
-- Chrome/Edge (latest)
-- Firefox (latest)
-- Safari (latest)
+---
 
 ## Troubleshooting
 
-### Common Issues
-1. **Slow loading**: Check cluster connectivity and adjust timeout settings
-2. **Missing data**: Verify Couchbase credentials and network access
-3. **Chart not updating**: Ensure bucket statistics are enabled in Couchbase
+| Issue | What to try |
+|-------|-------------|
+| Port in use | `python app.py --port 5060` or change `server.port` / gear UI (then restart) |
+| Can’t connect to cluster | Gear → **Test** on that row; check host `http(s)://…:8091`, user/pass, VPN/firewall |
+| Charts only show ~1 minute of *data* | History must accumulate while the page is open; x-axis still shows full selected range |
+| Time range looks wrong after upgrade | Hard refresh (Cmd+Shift+R / Ctrl+Shift+R) |
+| Settings save failed | Validation error in the modal status line; check host URLs start with `http://` or `https://` |
+| Empty dashboard | Ensure at least one cluster has `watch: true` and credentials work |
 
-### Log Monitoring
-The application provides detailed logging for:
-- Connection timeouts
-- Authentication failures
-- Bucket access errors
-- API response issues
+Logs: `logs/app.log` (if file logging enabled) and the process console.
 
-## Release Notes
+---
 
-### Version 2.1.0 - XDCR Monitoring Release
+## Dependencies
 
-#### 🚀 New Features
-- **XDCR Tab**: Complete cross-datacenter replication monitoring
-  - Real-time XDCR task status tracking
-  - Operations per second metrics for replication streams
-  - Error rate monitoring and failure analysis
-  - Remote cluster connection status
-- **Enhanced API**: New `/api/xdcrStatus` endpoint for XDCR metrics
-- **Visual Charts**: XDCR operations and error visualization in Data Charts tab
+- **Flask 2.3.3** — web server  
+- **aiohttp 3.9.5** — async HTTP to Couchbase  
+- **Chart.js**, **jQuery / jQuery UI**, **Bootstrap 4**, **Font Awesome** (CDN)  
 
-#### 🔧 Improvements
-- Extended tabbed navigation to include XDCR monitoring
-- Comprehensive XDCR data collection from remote clusters and tasks endpoints
-- Async XDCR data fetching for optimal performance
-- Error handling and timeout management for XDCR operations
+## Browser support
 
-#### 📋 Technical Details
-- XDCR task filtering for focused monitoring
-- Integration with existing timeout and error handling systems
-- Responsive chart rendering for XDCR metrics
-- JSON API support for external XDCR monitoring tools
+Chrome/Edge, Firefox, Safari (current versions).
 
-### Previous Releases
+---
+
+## Release notes
+
+See **[RELEASE_NOTES.md](RELEASE_NOTES.md)** for the full catalog and version history (1.0 baseline through 1.3.0).
+
+Older binary docs: [README_RELEASE.md](README_RELEASE.md) · testing notes: [README_TESTING.md](README_TESTING.md).
