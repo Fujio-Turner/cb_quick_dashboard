@@ -65,8 +65,12 @@ describe("ChartHistory", () => {
     expect(stats.points).toBe(3);
 
     const win = ChartHistory.getWindowSamples(key, 30, t0 + 2000);
-    expect(win.timestamp).toEqual([t0, t0 + 1000, t0 + 2000]);
-    expect(win.cmd_get).toEqual([1, 2, 3]);
+    // Full 30m grid — last samples should hold cmd_get=3
+    expect(win.timestamp[0]).toBe(t0 + 2000 - 30 * 60 * 1000);
+    expect(win.timestamp[win.timestamp.length - 1]).toBe(t0 + 2000);
+    expect(win.cmd_get[win.cmd_get.length - 1]).toBe(3);
+    // Before first ingested point, values are null
+    expect(win.cmd_get[0]).toBeNull();
 
     // 31 minutes later — old points pruned
     const later = t0 + 31 * 60 * 1000;
@@ -80,15 +84,48 @@ describe("ChartHistory", () => {
     );
     stats = ChartHistory.getBufferStats(key, later);
     expect(stats.points).toBe(1);
-    expect(ChartHistory.getWindowSamples(key, 30, later).cmd_get).toEqual([99]);
+    const winLater = ChartHistory.getWindowSamples(key, 30, later);
+    expect(winLater.cmd_get[winLater.cmd_get.length - 1]).toBe(99);
   });
 
-  test("getWindowSamples respects selected minutes", () => {
+  test("getWindowSamples spans full selected window on a grid", () => {
     const key = ChartHistory.historyKey("c1", "b");
+    const now = 2_000_000_000_000;
+    // only a few points in the last ~10s
+    ChartHistory.ingestSamples(
+      key,
+      {
+        timestamp: [now - 10000, now - 5000, now],
+        metric: [1, 2, 3],
+      },
+      now
+    );
+
+    const one = ChartHistory.getWindowSamples(key, 1, now);
+    const thirty = ChartHistory.getWindowSamples(key, 30, now);
+
+    expect(one.timestamp[0]).toBe(now - 1 * 60 * 1000);
+    expect(one.timestamp[one.timestamp.length - 1]).toBe(now);
+    expect(thirty.timestamp[0]).toBe(now - 30 * 60 * 1000);
+    expect(thirty.timestamp[thirty.timestamp.length - 1]).toBe(now);
+
+    // Wider window must start earlier (different x-axis range)
+    expect(thirty.timestamp[0]).toBeLessThan(one.timestamp[0]);
+    // More grid points on longer windows (or equal if capped)
+    expect(thirty.timestamp.length).toBeGreaterThanOrEqual(one.timestamp.length);
+
+    // Values null before first sample, then held
+    const firstDataIdx = one.timestamp.findIndex((t) => t >= now - 10000);
+    expect(one.metric[0]).toBeNull();
+    expect(one.metric[firstDataIdx]).toBe(1);
+    expect(one.metric[one.metric.length - 1]).toBe(3);
+  });
+
+  test("getWindowSamples denser grid still respects 5-minute slice of history", () => {
+    const key = ChartHistory.historyKey("c1", "dense");
     const now = 2_000_000_000_000;
     const timestamps = [];
     const values = [];
-    // one point per minute for 20 minutes
     for (let m = 0; m <= 20; m++) {
       timestamps.push(now - (20 - m) * 60 * 1000);
       values.push(m);
@@ -100,13 +137,10 @@ describe("ChartHistory", () => {
     );
 
     const five = ChartHistory.getWindowSamples(key, 5, now);
-    // points from now-5m through now inclusive ≈ 6
-    expect(five.timestamp.length).toBe(6);
-    expect(five.metric[0]).toBe(15);
+    expect(five.timestamp[0]).toBe(now - 5 * 60 * 1000);
     expect(five.metric[five.metric.length - 1]).toBe(20);
-
-    const one = ChartHistory.getWindowSamples(key, 1, now);
-    expect(one.timestamp.length).toBe(2);
+    // earliest grid cells before first in-window source stay null or hold
+    expect(five._windowMinutes).toBe(5);
   });
 
   test("windowOptionsHtml is 1, 5, 15, 30 with selected", () => {

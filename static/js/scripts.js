@@ -57,17 +57,11 @@ $(document).ready(function () {
       CH.ingestSamples(key, raw);
     }
     const mins = getSelectedWindowMinutes(clusterIndex);
-    const samples = CH.getWindowSamples(key, mins);
-    // Fallback to raw minute window if history empty (first paint race)
-    if (
-      (!samples.timestamp || samples.timestamp.length === 0) &&
-      raw &&
-      raw.timestamp &&
-      raw.timestamp.length
-    ) {
-      return raw;
+    // Always use history module so x-axis spans the full selected window
+    if (typeof CH.getWindowSamples === "function") {
+      return CH.getWindowSamples(key, mins);
     }
-    return samples;
+    return raw || { timestamp: [] };
   }
 
   function updateHistoryStatus(cluster, bucketStat, clusterIndex) {
@@ -78,13 +72,13 @@ $(document).ready(function () {
     if (!$status.length) return;
     if (!stats.points) {
       $status.text(
-        `History: collecting… (shows up to ${mins} min; keeps ${CH.MAX_RETENTION_MINUTES} min)`
+        `History: collecting… · x-axis = last ${mins} min (builds up to ${CH.MAX_RETENTION_MINUTES} min)`
       );
       return;
     }
     const span = stats.spanMinutes != null ? stats.spanMinutes.toFixed(1) : "0";
     $status.text(
-      `History: ${stats.points} points (~${span} min stored) · showing last ${mins} min · max ${CH.MAX_RETENTION_MINUTES} min`
+      `History: ${stats.points} pts stored (~${span} min) · x-axis window ${mins} min · max ${CH.MAX_RETENTION_MINUTES} min`
     );
   }
 
@@ -1756,21 +1750,27 @@ $(document).ready(function () {
         );
       });
 
-    // Time range (1–30 minutes) — redraw from client history buffer
+    // Time range (1 / 5 / 15 / 30) — full redraw so x-axis spans the new window
     $(`#time-window-${clusterIndex}`)
       .off("change")
       .on("change", function () {
         chartWindowMinutes = CH.clampWindowMinutes($(this).val());
         CH.saveWindowMinutes(chartWindowMinutes);
-        // Keep other cluster selectors in sync
-        $(".time-window-selector").val(String(chartWindowMinutes));
+        // Keep other cluster selectors in sync without re-firing change
+        const changedEl = this;
+        $(".time-window-selector").each(function () {
+          if (this !== changedEl) {
+            $(this).val(String(chartWindowMinutes));
+          }
+        });
         const selectedBucketIndex =
           parseInt($(`#bucket-select-${clusterIndex}`).val()) || 0;
-        loadBucketCharts(
-          clustersData[clusterIndex] || cluster,
-          clusterIndex,
-          selectedBucketIndex
-        );
+        const live = clustersData[clusterIndex] || cluster;
+        // Bypass updateCharts throttle — always rebuild from history grid
+        if (window.lastChartUpdate) {
+          window.lastChartUpdate[clusterIndex] = 0;
+        }
+        loadBucketCharts(live, clusterIndex, selectedBucketIndex);
       });
 
     // Initialize scale toggle change event
@@ -2812,6 +2812,13 @@ $(document).ready(function () {
       charts[chartKey].destroy();
     }
 
+    // Gap through nulls at the start of a wider time window
+    if (data && Array.isArray(data.datasets)) {
+      data.datasets = data.datasets.map(function (ds) {
+        return Object.assign({ spanGaps: true }, ds);
+      });
+    }
+
     const defaultScales = {
       x: {
         display: true,
@@ -2819,7 +2826,7 @@ $(document).ready(function () {
           display: false,
         },
         ticks: {
-          maxTicksLimit: 12,
+          maxTicksLimit: 10,
           autoSkip: true,
           maxRotation: 0,
         },
@@ -2833,9 +2840,17 @@ $(document).ready(function () {
       },
     };
 
-    const scales = customScales
-      ? { ...defaultScales, ...customScales }
-      : defaultScales;
+    // Merge custom scales but never drop x tick autoSkip from defaults
+    let scales = Object.assign({}, defaultScales);
+    if (customScales) {
+      scales = Object.assign({}, defaultScales, customScales);
+      if (customScales.x) {
+        scales.x = Object.assign({}, defaultScales.x, customScales.x);
+      }
+      if (customScales.y) {
+        scales.y = Object.assign({}, defaultScales.y, customScales.y);
+      }
+    }
 
     console.log("🏗️ Creating new chart:", chartKey);
     charts[chartKey] = new Chart(ctx, {
@@ -2844,6 +2859,7 @@ $(document).ready(function () {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: false,
         plugins: {
           title: {
             display: true,

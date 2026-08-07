@@ -106,7 +106,85 @@
   }
 
   /**
+   * Even grid step (ms) for a window so charts stay ~≤360 points.
+   */
+  function stepMsForWindow(windowMinutes) {
+    var mins = clampWindowMinutes(windowMinutes);
+    if (mins <= 1) return 1000;
+    if (mins <= 5) return 2000;
+    if (mins <= 15) return 5000;
+    return 10000;
+  }
+
+  /**
+   * Resample sparse samples onto a full [now-window, now] grid so category
+   * x-axes change when the user picks 1 vs 5 vs 15 vs 30 minutes.
+   * Holds last value within the window; null before the first real sample.
+   */
+  function resampleToGrid(samples, windowMinutes, nowMs) {
+    var now = nowMs != null ? nowMs : Date.now();
+    var mins = clampWindowMinutes(windowMinutes);
+    var start = now - mins * 60 * 1000;
+    var step = stepMsForWindow(mins);
+    var maxPoints = 360;
+    var span = now - start;
+    if (span / step + 1 > maxPoints) {
+      step = Math.ceil(span / (maxPoints - 1));
+    }
+
+    var grid = [];
+    for (var t = start; t < now; t += step) {
+      grid.push(t);
+    }
+    if (grid.length === 0 || grid[grid.length - 1] !== now) {
+      grid.push(now);
+    }
+
+    var srcTs = (samples && samples.timestamp) || [];
+    var metricNames = [];
+    if (samples) {
+      Object.keys(samples).forEach(function (k) {
+        if (k !== "timestamp" && Array.isArray(samples[k])) {
+          metricNames.push(k);
+        }
+      });
+    }
+
+    var out = { timestamp: grid, _windowMinutes: mins, _windowStart: start, _windowEnd: now };
+
+    if (srcTs.length === 0 || metricNames.length === 0) {
+      metricNames.forEach(function (name) {
+        out[name] = grid.map(function () {
+          return null;
+        });
+      });
+      return out;
+    }
+
+    var firstTs = srcTs[0];
+    metricNames.forEach(function (name) {
+      var src = samples[name] || [];
+      var srcIdx = 0;
+      var lastVal = null;
+      out[name] = grid.map(function (gt) {
+        while (srcIdx < srcTs.length && srcTs[srcIdx] <= gt) {
+          var v = src[srcIdx];
+          if (v !== null && v !== undefined) {
+            lastVal = v;
+          }
+          srcIdx++;
+        }
+        if (gt < firstTs) return null;
+        return lastVal;
+      });
+    });
+
+    return out;
+  }
+
+  /**
    * Build a samples-shaped object for the last `windowMinutes` minutes.
+   * Always spans the full selected window (even grid) for chart x-axes.
    * @returns {{ timestamp: number[], [metric: string]: Array }}
    */
   function getWindowSamples(key, windowMinutes, nowMs) {
@@ -124,30 +202,28 @@
     });
 
     var samples = { timestamp: timestamps };
-    if (timestamps.length === 0) {
-      return samples;
-    }
+    if (timestamps.length > 0) {
+      var metricSet = {};
+      for (var i = 0; i < timestamps.length; i++) {
+        var p = buf.get(timestamps[i]);
+        if (!p) continue;
+        Object.keys(p).forEach(function (k) {
+          metricSet[k] = true;
+        });
+      }
 
-    var metricSet = {};
-    for (var i = 0; i < timestamps.length; i++) {
-      var p = buf.get(timestamps[i]);
-      if (!p) continue;
-      Object.keys(p).forEach(function (k) {
-        metricSet[k] = true;
+      Object.keys(metricSet).forEach(function (name) {
+        samples[name] = timestamps.map(function (ts) {
+          var pt = buf.get(ts);
+          if (!pt || pt[name] === undefined || pt[name] === null) {
+            return null;
+          }
+          return pt[name];
+        });
       });
     }
 
-    Object.keys(metricSet).forEach(function (name) {
-      samples[name] = timestamps.map(function (ts) {
-        var pt = buf.get(ts);
-        if (!pt || pt[name] === undefined || pt[name] === null) {
-          return null;
-        }
-        return pt[name];
-      });
-    });
-
-    return samples;
+    return resampleToGrid(samples, mins, now);
   }
 
   function getBufferStats(key, nowMs) {
@@ -247,6 +323,8 @@
     historyKey: historyKey,
     ingestSamples: ingestSamples,
     getWindowSamples: getWindowSamples,
+    resampleToGrid: resampleToGrid,
+    stepMsForWindow: stepMsForWindow,
     getBufferStats: getBufferStats,
     clear: clear,
     formatTimeLabels: formatTimeLabels,
