@@ -61,7 +61,7 @@ The dashboard supports both HTTP and HTTPS connections. For HTTPS connections wi
 ## Accessing the Dashboard
 
 After starting the application, open your web browser and navigate to:
-http://localhost:5001
+http://127.0.0.1:5050
 
 ## Logs
 

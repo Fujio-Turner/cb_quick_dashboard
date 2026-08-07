@@ -1,6 +1,7 @@
 {
     "server": {
-        "port": 5000,
+        "host": "127.0.0.1",
+        "port": 5050,
         "debug": false
     },
     "logging": {
@@ -19,7 +20,7 @@
         {
             "host": "http://localhost:8092",
             "user": "test_admin",
-            "pass": "test_password", 
+            "pass": "test_password",
             "customName": "Test Cluster 2",
             "watch": false
         },

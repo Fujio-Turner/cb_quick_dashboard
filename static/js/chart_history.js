@@ -1,0 +1,342 @@
+/**
+ * Client-side chart history buffer for Couchbase bucket stats samples.
+ *
+ * Couchbase /stats default zoom returns ~60s at 1s resolution. This module
+ * merges successive polls (by timestamp) and retains up to 30 minutes so the
+ * UI can render selectable windows: 1, 5, 15, or 30 minutes.
+ *
+ * Works in browser (window.ChartHistory) and Node/Jest (module.exports).
+ */
+(function (global) {
+  "use strict";
+
+  var MAX_RETENTION_MINUTES = 30;
+  var MAX_RETENTION_MS = MAX_RETENTION_MINUTES * 60 * 1000;
+  var DEFAULT_WINDOW_MINUTES = 5;
+  /** Allowed UI window choices (minutes). */
+  var WINDOW_OPTIONS = [1, 5, 15, 30];
+  var STORAGE_KEY = "cb_dashboard_chart_window_minutes";
+
+  /** @type {Map<string, Map<number, Object>>} */
+  var buffers = new Map();
+
+  function clampWindowMinutes(minutes) {
+    var n = parseInt(minutes, 10);
+    if (isNaN(n)) {
+      return DEFAULT_WINDOW_MINUTES;
+    }
+    // Snap to nearest allowed option (exact match preferred)
+    var best = WINDOW_OPTIONS[0];
+    var bestDist = Math.abs(n - best);
+    for (var i = 1; i < WINDOW_OPTIONS.length; i++) {
+      var opt = WINDOW_OPTIONS[i];
+      if (opt === n) return opt;
+      var d = Math.abs(n - opt);
+      if (d < bestDist) {
+        best = opt;
+        bestDist = d;
+      }
+    }
+    return best;
+  }
+
+  function normalizeTimestamp(ts) {
+    var n = Number(ts);
+    if (!isFinite(n)) return null;
+    // Seconds → ms (CB usually sends ms; guard anyway)
+    if (n > 0 && n < 1e12) {
+      n = n * 1000;
+    }
+    return Math.floor(n);
+  }
+
+  function historyKey(clusterId, bucketName) {
+    return String(clusterId || "unknown") + "::" + String(bucketName || "unknown");
+  }
+
+  function getBuffer(key) {
+    if (!buffers.has(key)) {
+      buffers.set(key, new Map());
+    }
+    return buffers.get(key);
+  }
+
+  function pruneBuffer(buf, nowMs) {
+    var cutoff = nowMs - MAX_RETENTION_MS;
+    buf.forEach(function (_point, ts) {
+      if (ts < cutoff) {
+        buf.delete(ts);
+      }
+    });
+  }
+
+  /**
+   * Merge one Couchbase `op.samples` object into the buffer for key.
+   * @param {string} key
+   * @param {Object} samples - { timestamp: number[], metricName: number[], ... }
+   * @param {number} [nowMs]
+   */
+  function ingestSamples(key, samples, nowMs) {
+    if (!samples || !Array.isArray(samples.timestamp) || samples.timestamp.length === 0) {
+      return { added: 0, size: getBuffer(key).size };
+    }
+    var now = nowMs != null ? nowMs : Date.now();
+    var buf = getBuffer(key);
+    var timestamps = samples.timestamp;
+    var metricNames = Object.keys(samples).filter(function (k) {
+      return k !== "timestamp" && Array.isArray(samples[k]);
+    });
+    var added = 0;
+    for (var i = 0; i < timestamps.length; i++) {
+      var ts = normalizeTimestamp(timestamps[i]);
+      if (ts == null) continue;
+      var point = buf.has(ts) ? buf.get(ts) : {};
+      var isNew = !buf.has(ts);
+      for (var m = 0; m < metricNames.length; m++) {
+        var name = metricNames[m];
+        if (i < samples[name].length) {
+          point[name] = samples[name][i];
+        }
+      }
+      buf.set(ts, point);
+      if (isNew) added++;
+    }
+    pruneBuffer(buf, now);
+    return { added: added, size: buf.size };
+  }
+
+  /**
+   * Even grid step (ms) for a window so charts stay ~≤360 points.
+   */
+  function stepMsForWindow(windowMinutes) {
+    var mins = clampWindowMinutes(windowMinutes);
+    if (mins <= 1) return 1000;
+    if (mins <= 5) return 2000;
+    if (mins <= 15) return 5000;
+    return 10000;
+  }
+
+  /**
+   * Resample sparse samples onto a full [now-window, now] grid so category
+   * x-axes change when the user picks 1 vs 5 vs 15 vs 30 minutes.
+   * Holds last value within the window; null before the first real sample.
+   */
+  function resampleToGrid(samples, windowMinutes, nowMs) {
+    var now = nowMs != null ? nowMs : Date.now();
+    var mins = clampWindowMinutes(windowMinutes);
+    var start = now - mins * 60 * 1000;
+    var step = stepMsForWindow(mins);
+    var maxPoints = 360;
+    var span = now - start;
+    if (span / step + 1 > maxPoints) {
+      step = Math.ceil(span / (maxPoints - 1));
+    }
+
+    var grid = [];
+    for (var t = start; t < now; t += step) {
+      grid.push(t);
+    }
+    if (grid.length === 0 || grid[grid.length - 1] !== now) {
+      grid.push(now);
+    }
+
+    var srcTs = (samples && samples.timestamp) || [];
+    var metricNames = [];
+    if (samples) {
+      Object.keys(samples).forEach(function (k) {
+        if (k !== "timestamp" && Array.isArray(samples[k])) {
+          metricNames.push(k);
+        }
+      });
+    }
+
+    var out = { timestamp: grid, _windowMinutes: mins, _windowStart: start, _windowEnd: now };
+
+    if (srcTs.length === 0 || metricNames.length === 0) {
+      metricNames.forEach(function (name) {
+        out[name] = grid.map(function () {
+          return null;
+        });
+      });
+      return out;
+    }
+
+    var firstTs = srcTs[0];
+    metricNames.forEach(function (name) {
+      var src = samples[name] || [];
+      var srcIdx = 0;
+      var lastVal = null;
+      out[name] = grid.map(function (gt) {
+        while (srcIdx < srcTs.length && srcTs[srcIdx] <= gt) {
+          var v = src[srcIdx];
+          if (v !== null && v !== undefined) {
+            lastVal = v;
+          }
+          srcIdx++;
+        }
+        if (gt < firstTs) return null;
+        return lastVal;
+      });
+    });
+
+    return out;
+  }
+
+  /**
+   * Build a samples-shaped object for the last `windowMinutes` minutes.
+   * Always spans the full selected window (even grid) for chart x-axes.
+   * @returns {{ timestamp: number[], [metric: string]: Array }}
+   */
+  function getWindowSamples(key, windowMinutes, nowMs) {
+    var now = nowMs != null ? nowMs : Date.now();
+    var mins = clampWindowMinutes(windowMinutes);
+    var buf = getBuffer(key);
+    pruneBuffer(buf, now);
+    var cutoff = now - mins * 60 * 1000;
+    var timestamps = [];
+    buf.forEach(function (_point, ts) {
+      if (ts >= cutoff) timestamps.push(ts);
+    });
+    timestamps.sort(function (a, b) {
+      return a - b;
+    });
+
+    var samples = { timestamp: timestamps };
+    if (timestamps.length > 0) {
+      var metricSet = {};
+      for (var i = 0; i < timestamps.length; i++) {
+        var p = buf.get(timestamps[i]);
+        if (!p) continue;
+        Object.keys(p).forEach(function (k) {
+          metricSet[k] = true;
+        });
+      }
+
+      Object.keys(metricSet).forEach(function (name) {
+        samples[name] = timestamps.map(function (ts) {
+          var pt = buf.get(ts);
+          if (!pt || pt[name] === undefined || pt[name] === null) {
+            return null;
+          }
+          return pt[name];
+        });
+      });
+    }
+
+    return resampleToGrid(samples, mins, now);
+  }
+
+  function getBufferStats(key, nowMs) {
+    var now = nowMs != null ? nowMs : Date.now();
+    var buf = getBuffer(key);
+    pruneBuffer(buf, now);
+    if (buf.size === 0) {
+      return {
+        points: 0,
+        oldest: null,
+        newest: null,
+        spanMinutes: 0,
+        maxRetentionMinutes: MAX_RETENTION_MINUTES,
+      };
+    }
+    var timestamps = Array.from(buf.keys()).sort(function (a, b) {
+      return a - b;
+    });
+    var oldest = timestamps[0];
+    var newest = timestamps[timestamps.length - 1];
+    return {
+      points: timestamps.length,
+      oldest: oldest,
+      newest: newest,
+      spanMinutes: (newest - oldest) / 60000,
+      maxRetentionMinutes: MAX_RETENTION_MINUTES,
+    };
+  }
+
+  function clear(key) {
+    if (key == null) {
+      buffers.clear();
+    } else {
+      buffers.delete(key);
+    }
+  }
+
+  function formatTimeLabels(timestamps) {
+    return (timestamps || []).map(function (ts) {
+      var date = new Date(ts);
+      return date.toLocaleTimeString("en-US", {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    });
+  }
+
+  function loadSavedWindowMinutes() {
+    try {
+      if (typeof localStorage === "undefined") return DEFAULT_WINDOW_MINUTES;
+      var v = localStorage.getItem(STORAGE_KEY);
+      if (v == null) return DEFAULT_WINDOW_MINUTES;
+      return clampWindowMinutes(v);
+    } catch (e) {
+      return DEFAULT_WINDOW_MINUTES;
+    }
+  }
+
+  function saveWindowMinutes(minutes) {
+    try {
+      if (typeof localStorage === "undefined") return;
+      localStorage.setItem(STORAGE_KEY, String(clampWindowMinutes(minutes)));
+    } catch (e) {
+      /* ignore quota / private mode */
+    }
+  }
+
+  function windowOptionsHtml(selectedMinutes) {
+    var sel = clampWindowMinutes(selectedMinutes);
+    var parts = [];
+    for (var i = 0; i < WINDOW_OPTIONS.length; i++) {
+      var m = WINDOW_OPTIONS[i];
+      parts.push(
+        '<option value="' +
+          m +
+          '"' +
+          (m === sel ? " selected" : "") +
+          ">" +
+          m +
+          (m === 1 ? " minute" : " minutes") +
+          "</option>"
+      );
+    }
+    return parts.join("");
+  }
+
+  var api = {
+    MAX_RETENTION_MINUTES: MAX_RETENTION_MINUTES,
+    MAX_RETENTION_MS: MAX_RETENTION_MS,
+    DEFAULT_WINDOW_MINUTES: DEFAULT_WINDOW_MINUTES,
+    WINDOW_OPTIONS: WINDOW_OPTIONS,
+    STORAGE_KEY: STORAGE_KEY,
+    clampWindowMinutes: clampWindowMinutes,
+    normalizeTimestamp: normalizeTimestamp,
+    historyKey: historyKey,
+    ingestSamples: ingestSamples,
+    getWindowSamples: getWindowSamples,
+    resampleToGrid: resampleToGrid,
+    stepMsForWindow: stepMsForWindow,
+    getBufferStats: getBufferStats,
+    clear: clear,
+    formatTimeLabels: formatTimeLabels,
+    loadSavedWindowMinutes: loadSavedWindowMinutes,
+    saveWindowMinutes: saveWindowMinutes,
+    windowOptionsHtml: windowOptionsHtml,
+    // test helper
+    _buffers: buffers,
+  };
+
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = api;
+  }
+  global.ChartHistory = api;
+})(typeof window !== "undefined" ? window : globalThis);

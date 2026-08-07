@@ -97,7 +97,7 @@ jobs:
         echo. >> dist\README.txt
         echo 1. Edit config.json with your cluster settings >> dist\README.txt
         echo 2. Run cb_dashboard.exe >> dist\README.txt
-        echo 3. Open http://localhost:5001 in your browser >> dist\README.txt
+        echo 3. Open http://127.0.0.1:5050 in your browser >> dist\README.txt
         echo 4. Logs will be written to logs\app.log >> dist\README.txt
       shell: cmd
     
@@ -111,7 +111,7 @@ jobs:
         
         1. Edit config.json with your cluster settings
         2. Run ./cb_dashboard
-        3. Open http://localhost:5001 in your browser
+        3. Open http://127.0.0.1:5050 in your browser
         4. Logs will be written to logs/app.log
         EOF
     

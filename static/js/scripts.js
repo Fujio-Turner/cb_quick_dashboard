@@ -3,6 +3,85 @@ $(document).ready(function () {
   let charts = {};
   let isInitialized = false;
 
+  // Chart time-window state (1–30 minutes); history retained up to 30m via ChartHistory
+  const CH =
+    typeof ChartHistory !== "undefined"
+      ? ChartHistory
+      : {
+          MAX_RETENTION_MINUTES: 30,
+          DEFAULT_WINDOW_MINUTES: 5,
+          clampWindowMinutes: (m) => Math.min(30, Math.max(1, parseInt(m, 10) || 5)),
+          historyKey: (c, b) => `${c}::${b}`,
+          ingestSamples: () => ({ added: 0, size: 0 }),
+          getWindowSamples: (_k, _m) => ({ timestamp: [] }),
+          getBufferStats: () => ({ points: 0, spanMinutes: 0 }),
+          formatTimeLabels: (ts) =>
+            (ts || []).map((t) => new Date(t).toLocaleTimeString()),
+          loadSavedWindowMinutes: () => 5,
+          saveWindowMinutes: () => {},
+          windowOptionsHtml: () => "",
+        };
+
+  let chartWindowMinutes = CH.loadSavedWindowMinutes();
+
+  function clusterHistoryId(cluster) {
+    return cluster.clusterUUID || cluster.host || "unknown";
+  }
+
+  function ingestClusterBucketHistory(clusters) {
+    (clusters || []).forEach((cluster) => {
+      if (cluster.not_watching || cluster.error) return;
+      const cid = clusterHistoryId(cluster);
+      (cluster.bucket_stats || []).forEach((bs) => {
+        const samples = bs && bs.stats && bs.stats.op && bs.stats.op.samples;
+        if (!samples || !bs.name) return;
+        CH.ingestSamples(CH.historyKey(cid, bs.name), samples);
+      });
+    });
+  }
+
+  function getSelectedWindowMinutes(clusterIndex) {
+    const $el = $(`#time-window-${clusterIndex}`);
+    if ($el.length) {
+      return CH.clampWindowMinutes($el.val());
+    }
+    return chartWindowMinutes;
+  }
+
+  function resolveChartSamples(cluster, bucketStat, clusterIndex) {
+    const key = CH.historyKey(clusterHistoryId(cluster), bucketStat.name);
+    // Ensure latest poll is merged even if global ingest missed this path
+    const raw =
+      bucketStat.stats && bucketStat.stats.op && bucketStat.stats.op.samples;
+    if (raw) {
+      CH.ingestSamples(key, raw);
+    }
+    const mins = getSelectedWindowMinutes(clusterIndex);
+    // Always use history module so x-axis spans the full selected window
+    if (typeof CH.getWindowSamples === "function") {
+      return CH.getWindowSamples(key, mins);
+    }
+    return raw || { timestamp: [] };
+  }
+
+  function updateHistoryStatus(cluster, bucketStat, clusterIndex) {
+    const key = CH.historyKey(clusterHistoryId(cluster), bucketStat.name);
+    const stats = CH.getBufferStats(key);
+    const mins = getSelectedWindowMinutes(clusterIndex);
+    const $status = $(`#chart-history-status-${clusterIndex}`);
+    if (!$status.length) return;
+    if (!stats.points) {
+      $status.text(
+        `History: collecting… · x-axis = last ${mins} min (builds up to ${CH.MAX_RETENTION_MINUTES} min)`
+      );
+      return;
+    }
+    const span = stats.spanMinutes != null ? stats.spanMinutes.toFixed(1) : "0";
+    $status.text(
+      `History: ${stats.points} pts stored (~${span} min) · x-axis window ${mins} min · max ${CH.MAX_RETENTION_MINUTES} min`
+    );
+  }
+
   function getHealthBadgeClass(cluster) {
     if (cluster.not_watching) {
       return "badge-warning"; // Yellow for not watching
@@ -33,6 +112,8 @@ $(document).ready(function () {
       method: "GET",
       success: function (clusters) {
         clustersData = clusters;
+        // Merge bucket stats into rolling 30-minute client history on every poll
+        ingestClusterBucketHistory(clusters);
         if (!isInitialized) {
           initializeClusters(clusters);
           isInitialized = true;
@@ -446,49 +527,48 @@ $(document).ready(function () {
     const formatValue = (key, value) => {
       if (typeof value !== "number") return value;
 
-      // Memory and Disk-related stats (convert to appropriate units)
-      if (
-        key.includes("mem") ||
-        key.includes("memory") ||
-        key.includes("swap") ||
-        key.includes("disk") ||
-        key.includes("storage") ||
-        key.includes("hdd")
-      ) {
-        // For very large values (> 1TB), show in TB
-        if (value > 1024 * 1024 * 1024 * 1024) {
-          return `${(value / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`;
-        }
-        // For large values (> 1GB), show in GB
-        else if (value > 1024 * 1024 * 1024) {
-          return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-        }
-        // For medium values (> 1MB), show in MB
-        else if (value > 1024 * 1024) {
-          return `${(value / (1024 * 1024)).toFixed(2)} MB`;
-        }
-        // For small values (> 1KB), show in KB
-        else if (value > 1024) {
-          return `${(value / 1024).toFixed(2)} KB`;
-        }
-        // For very small values, show in bytes
-        else {
-          return `${value.toFixed(0)} bytes`;
-        }
-      }
+      const lowerKey = key.toLowerCase();
 
-      // Percentage-related stats
+      // Percentage-related stats first (keys like memory_ratio / disk_percent
+      // also match mem/disk and must not be treated as byte sizes)
       if (
-        key.includes("rate") ||
-        key.includes("ratio") ||
-        key.includes("percent") ||
-        key.includes("utilization")
+        lowerKey.includes("rate") ||
+        lowerKey.includes("ratio") ||
+        lowerKey.includes("percent") ||
+        lowerKey.includes("utilization")
       ) {
         return `${value.toFixed(2)}%`;
       }
 
+      // Memory and Disk-related stats (convert to appropriate units)
+      if (
+        lowerKey.includes("mem") ||
+        lowerKey.includes("memory") ||
+        lowerKey.includes("swap") ||
+        lowerKey.includes("disk") ||
+        lowerKey.includes("storage") ||
+        lowerKey.includes("hdd")
+      ) {
+        const TB = 1024 * 1024 * 1024 * 1024;
+        const GB = 1024 * 1024 * 1024;
+        const MB = 1024 * 1024;
+        const KB = 1024;
+        // Inclusive thresholds so exact 1GB/1TB label correctly
+        if (value >= TB) {
+          return `${(value / TB).toFixed(2)} TB`;
+        } else if (value >= GB) {
+          return `${(value / GB).toFixed(2)} GB`;
+        } else if (value >= MB) {
+          return `${(value / MB).toFixed(2)} MB`;
+        } else if (value >= KB) {
+          return `${(value / KB).toFixed(2)} KB`;
+        } else {
+          return `${value.toFixed(0)} bytes`;
+        }
+      }
+
       // Time-related stats (convert seconds to appropriate units)
-      if (key.includes("time") && value > 60) {
+      if (lowerKey.includes("time") && value > 60) {
         const minutes = Math.floor(value / 60);
         const seconds = (value % 60).toFixed(1);
         return `${minutes}m ${seconds}s`;
@@ -1468,8 +1548,8 @@ $(document).ready(function () {
     }
 
     let html = `
-            <div class="row mb-3">
-                <div class="col-md-4">
+            <div class="row mb-3 align-items-end chart-controls-row">
+                <div class="col-md-3 col-lg-2">
                     <label for="bucket-select-${index}">Select Bucket:</label>
                     <select id="bucket-select-${index}" class="form-control bucket-selector" data-cluster-index="${index}">
                         ${cluster.bucket_stats
@@ -1482,13 +1562,20 @@ $(document).ready(function () {
                           .join("")}
                     </select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3 col-lg-2">
+                    <label for="time-window-${index}">Time range:</label>
+                    <select id="time-window-${index}" class="form-control time-window-selector" data-cluster-index="${index}" title="Chart window (history builds up to ${CH.MAX_RETENTION_MINUTES} minutes via 10s polls)">
+                        ${CH.windowOptionsHtml(chartWindowMinutes)}
+                    </select>
+                </div>
+                <div class="col-md-3 col-lg-3">
                     <div class="selected-bucket-info" id="bucket-info-${index}">
                         <h5 class="mb-0" id="bucket-title-${index}"></h5>
                         <small class="text-muted" id="bucket-details-${index}"></small>
+                        <div class="text-muted small mt-1" id="chart-history-status-${index}"></div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label>Chart Scale:</label>
                     <div class="btn-group btn-group-toggle" data-toggle="buttons" id="scale-toggle-${index}">
                         <label class="btn btn-outline-secondary btn-sm active">
@@ -1501,7 +1588,7 @@ $(document).ready(function () {
                 </div>
                 <div class="col-md-1">
                     <label>&nbsp;</label>
-                    <button class="btn btn-outline-primary btn-sm btn-block refresh-charts" data-cluster-index="${index}">
+                    <button class="btn btn-outline-primary btn-sm btn-block refresh-charts" data-cluster-index="${index}" title="Redraw charts from history">
                         🔄 Refresh
                     </button>
                 </div>
@@ -1656,7 +1743,34 @@ $(document).ready(function () {
       .on("change", function () {
         const selectedBucketIndex = parseInt($(this).val());
         console.log("🔄 Bucket selector changed to:", selectedBucketIndex);
-        loadBucketCharts(cluster, clusterIndex, selectedBucketIndex);
+        loadBucketCharts(
+          clustersData[clusterIndex] || cluster,
+          clusterIndex,
+          selectedBucketIndex
+        );
+      });
+
+    // Time range (1 / 5 / 15 / 30) — full redraw so x-axis spans the new window
+    $(`#time-window-${clusterIndex}`)
+      .off("change")
+      .on("change", function () {
+        chartWindowMinutes = CH.clampWindowMinutes($(this).val());
+        CH.saveWindowMinutes(chartWindowMinutes);
+        // Keep other cluster selectors in sync without re-firing change
+        const changedEl = this;
+        $(".time-window-selector").each(function () {
+          if (this !== changedEl) {
+            $(this).val(String(chartWindowMinutes));
+          }
+        });
+        const selectedBucketIndex =
+          parseInt($(`#bucket-select-${clusterIndex}`).val()) || 0;
+        const live = clustersData[clusterIndex] || cluster;
+        // Bypass updateCharts throttle — always rebuild from history grid
+        if (window.lastChartUpdate) {
+          window.lastChartUpdate[clusterIndex] = 0;
+        }
+        loadBucketCharts(live, clusterIndex, selectedBucketIndex);
       });
 
     // Initialize scale toggle change event
@@ -1713,19 +1827,10 @@ $(document).ready(function () {
       return;
     }
 
-    const samples = bucketStat.stats.op.samples;
+    const samples = resolveChartSamples(cluster, bucketStat, clusterIndex);
     const timestamps = samples.timestamp || [];
-
-    // Convert timestamps to human-readable time format (HH:MM:SS)
-    const timeLabels = timestamps.map((ts) => {
-      const date = new Date(ts); // Timestamps are already in milliseconds
-      return date.toLocaleTimeString("en-US", {
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-    });
+    const timeLabels = CH.formatTimeLabels(timestamps);
+    updateHistoryStatus(cluster, bucketStat, clusterIndex);
 
     // Update bucket info
     $(`#bucket-title-${clusterIndex}`).text(
@@ -2707,11 +2812,23 @@ $(document).ready(function () {
       charts[chartKey].destroy();
     }
 
+    // Gap through nulls at the start of a wider time window
+    if (data && Array.isArray(data.datasets)) {
+      data.datasets = data.datasets.map(function (ds) {
+        return Object.assign({ spanGaps: true }, ds);
+      });
+    }
+
     const defaultScales = {
       x: {
         display: true,
         title: {
           display: false,
+        },
+        ticks: {
+          maxTicksLimit: 10,
+          autoSkip: true,
+          maxRotation: 0,
         },
       },
       y: {
@@ -2723,9 +2840,17 @@ $(document).ready(function () {
       },
     };
 
-    const scales = customScales
-      ? { ...defaultScales, ...customScales }
-      : defaultScales;
+    // Merge custom scales but never drop x tick autoSkip from defaults
+    let scales = Object.assign({}, defaultScales);
+    if (customScales) {
+      scales = Object.assign({}, defaultScales, customScales);
+      if (customScales.x) {
+        scales.x = Object.assign({}, defaultScales.x, customScales.x);
+      }
+      if (customScales.y) {
+        scales.y = Object.assign({}, defaultScales.y, customScales.y);
+      }
+    }
 
     console.log("🏗️ Creating new chart:", chartKey);
     charts[chartKey] = new Chart(ctx, {
@@ -2734,6 +2859,7 @@ $(document).ready(function () {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: false,
         plugins: {
           title: {
             display: true,
@@ -2829,17 +2955,10 @@ $(document).ready(function () {
       return;
     }
 
-    const samples = bucketStat.stats.op.samples;
+    const samples = resolveChartSamples(cluster, bucketStat, clusterIndex);
     const timestamps = samples.timestamp || [];
-    const timeLabels = timestamps.map((ts) => {
-      const date = new Date(ts); // Timestamps are already in milliseconds
-      return date.toLocaleTimeString("en-US", {
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-    });
+    const timeLabels = CH.formatTimeLabels(timestamps);
+    updateHistoryStatus(cluster, bucketStat, clusterIndex);
 
     // Update each chart type
     const chartKeys = [
@@ -3073,11 +3192,56 @@ $(document).ready(function () {
     });
   }
 
-  // Initial fetch
-  fetchClusters();
+  // Initial fetch + polling (interval from /api/meta / config)
+  let pollIntervalMs = 10000;
+  let pollTimer = null;
 
-  // Poll every 10 seconds
-  setInterval(fetchClusters, 10000);
+  function setPollIntervalSeconds(seconds) {
+    const sec = Math.max(5, Math.min(300, parseInt(seconds, 10) || 10));
+    pollIntervalMs = sec * 1000;
+    if (pollTimer) {
+      clearInterval(pollTimer);
+    }
+    pollTimer = setInterval(fetchClusters, pollIntervalMs);
+  }
+
+  function applyMeta(meta) {
+    if (!meta) return;
+    if (meta.poll_interval_seconds != null) {
+      setPollIntervalSeconds(meta.poll_interval_seconds);
+    }
+  }
+
+  // Settings gear UI
+  if (typeof DashboardConfigUI !== "undefined") {
+    DashboardConfigUI.init({
+      onSaved: function (info) {
+        if (info && info.poll_interval_seconds != null) {
+          setPollIntervalSeconds(info.poll_interval_seconds);
+        }
+        // Force full card rebuild so new/removed clusters appear
+        isInitialized = false;
+        window.chartsInitialized = {};
+        charts = {};
+        fetchClusters();
+      },
+    });
+  }
+
+  $.ajax({
+    url: "/api/meta",
+    method: "GET",
+    dataType: "json",
+  })
+    .done(function (meta) {
+      applyMeta(meta);
+    })
+    .always(function () {
+      fetchClusters();
+      if (!pollTimer) {
+        setPollIntervalSeconds(pollIntervalMs / 1000);
+      }
+    });
 
   // Index Charts functionality
   let indexData = {};
