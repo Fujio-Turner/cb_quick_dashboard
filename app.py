@@ -10,13 +10,18 @@ from logging.handlers import RotatingFileHandler
 # Version information
 # 🤖 AI ASSISTANT HINT: Please increment this version number on every significant update/save
 # Use semantic versioning: MAJOR.MINOR.PATCH (e.g., 1.0.0 -> 1.0.1 for fixes, 1.1.0 for features)
-__version__ = "1.0.3"
+__version__ = "1.1.0"
 
 app = Flask(__name__)
 
 # Global configuration
 config = None
 logger = None
+
+# Dashboard listen defaults (port 5000 is commonly taken by other local services)
+DEFAULT_SERVER_HOST = "127.0.0.1"
+DEFAULT_SERVER_PORT = 5050
+DEFAULT_SERVER_DEBUG = False
 
 
 # Utility functions
@@ -25,6 +30,150 @@ def validate_host_url(host):
     if not host:
         return False
     return host.startswith("http://") or host.startswith("https://")
+
+
+def validate_listen_host(host):
+    """Validate dashboard bind host (hostname or IP, non-empty string)."""
+    if not isinstance(host, str):
+        return False
+    host = host.strip()
+    if not host:
+        return False
+    # Reject characters that break bind strings; allow IPv4/IPv6/hostnames
+    if any(c.isspace() for c in host):
+        return False
+    return True
+
+
+def validate_listen_port(port):
+    """Validate TCP port number."""
+    try:
+        port_int = int(port)
+    except (TypeError, ValueError):
+        return False
+    return 1 <= port_int <= 65535
+
+
+def resolve_server_settings(config_data=None, argv=None, env=None):
+    """Resolve dashboard listen host/port/debug.
+
+    Precedence for host and port:
+      1. CLI flags (--host / --port)
+      2. Environment (CB_DASHBOARD_HOST / CB_DASHBOARD_PORT)
+      3. config.json server.host / server.port
+      4. Built-in defaults (127.0.0.1:5050)
+
+    Debug: config server.debug, else default False. Forced False when frozen.
+    """
+    import argparse
+    import sys as _sys
+
+    if config_data is None:
+        config_data = {}
+    if argv is None:
+        argv = _sys.argv[1:]
+    if env is None:
+        env = os.environ
+
+    server_config = config_data.get("server") or {}
+
+    host = DEFAULT_SERVER_HOST
+    port = DEFAULT_SERVER_PORT
+    debug = DEFAULT_SERVER_DEBUG
+    sources = {"host": "default", "port": "default", "debug": "default"}
+
+    # 3) config file
+    if "host" in server_config and server_config["host"] is not None:
+        host = str(server_config["host"]).strip()
+        sources["host"] = "config"
+    if "port" in server_config and server_config["port"] is not None:
+        try:
+            port = int(server_config["port"])
+            sources["port"] = "config"
+        except (TypeError, ValueError):
+            pass
+    if "debug" in server_config:
+        debug = bool(server_config["debug"])
+        sources["debug"] = "config"
+
+    # 2) environment
+    env_host = env.get("CB_DASHBOARD_HOST")
+    if env_host:
+        host = env_host.strip()
+        sources["host"] = "env"
+    env_port = env.get("CB_DASHBOARD_PORT")
+    if env_port:
+        try:
+            port = int(env_port)
+            sources["port"] = "env"
+        except ValueError:
+            pass
+
+    # 1) CLI
+    parser = argparse.ArgumentParser(
+        prog="cb_dashboard",
+        description=f"Couchbase Quick Dashboard v{__version__}",
+        add_help=True,
+    )
+    parser.add_argument(
+        "--host",
+        dest="host",
+        default=None,
+        help=f"Bind address (default: {DEFAULT_SERVER_HOST})",
+    )
+    parser.add_argument(
+        "--port",
+        dest="port",
+        type=int,
+        default=None,
+        help=f"Listen port (default: {DEFAULT_SERVER_PORT})",
+    )
+    parser.add_argument(
+        "--debug",
+        dest="debug_flag",
+        action="store_true",
+        default=False,
+        help="Enable Flask debug mode",
+    )
+    parser.add_argument(
+        "--no-debug",
+        dest="no_debug_flag",
+        action="store_true",
+        default=False,
+        help="Disable Flask debug mode",
+    )
+    args, _unknown = parser.parse_known_args(list(argv))
+
+    if args.host is not None:
+        host = args.host.strip()
+        sources["host"] = "cli"
+    if args.port is not None:
+        port = int(args.port)
+        sources["port"] = "cli"
+    if args.debug_flag:
+        debug = True
+        sources["debug"] = "cli"
+    elif args.no_debug_flag:
+        debug = False
+        sources["debug"] = "cli"
+
+    # PyInstaller executables never use debug reloader
+    if getattr(_sys, "frozen", False):
+        debug = False
+        sources["debug"] = "frozen"
+
+    if not validate_listen_host(host):
+        raise ValueError(f"Invalid listen host: {host!r}")
+    if not validate_listen_port(port):
+        raise ValueError(f"Invalid listen port: {port!r} (need 1-65535)")
+
+    return {
+        "host": host,
+        "port": int(port),
+        "debug": bool(debug),
+        "url": f"http://{host}:{int(port)}",
+        "sources": sources,
+    }
 
 
 def extract_host_from_url(url):
@@ -503,6 +652,27 @@ def validate_config(config_data):
 
             if "enabled" not in logging_config:
                 errors.append("Missing 'enabled' in logging config")
+
+    # Validate optional server section (host/port/debug)
+    if "server" in config_data:
+        server_config = config_data["server"]
+        if not isinstance(server_config, dict):
+            errors.append("'server' must be an object")
+        else:
+            if "host" in server_config and not validate_listen_host(
+                server_config.get("host")
+            ):
+                errors.append(
+                    "Invalid 'server.host': must be a non-empty host/IP without spaces"
+                )
+            if "port" in server_config and not validate_listen_port(
+                server_config.get("port")
+            ):
+                errors.append("Invalid 'server.port': must be an integer 1-65535")
+            if "debug" in server_config and not isinstance(
+                server_config.get("debug"), bool
+            ):
+                errors.append("'server.debug' must be a boolean")
 
     # Validate clusters section
     if "clusters" not in config_data:
@@ -994,38 +1164,51 @@ def initialize_app():
     return config_data
 
 
-if __name__ == "__main__":
+def main(argv=None):
+    """Application entrypoint used by ``python app.py`` and console scripts."""
     import sys
 
     # Initialize application
     config_data = initialize_app()
 
-    # Print version information
+    try:
+        settings = resolve_server_settings(config_data, argv=argv)
+    except ValueError as e:
+        print(f"Configuration error: {e}")
+        sys.exit(1)
+
+    host = settings["host"]
+    port = settings["port"]
+    debug = settings["debug"]
+    url = settings["url"]
+
+    # Print version and where to open the UI
     print(f"Couchbase Dashboard v{__version__}")
+    print(f"Open: {url}")
+    print(
+        f"Listen: host={host} ({settings['sources']['host']}), "
+        f"port={port} ({settings['sources']['port']}), "
+        f"debug={debug} ({settings['sources']['debug']})"
+    )
 
-    # Get server configuration from config
-    server_config = config_data.get("server", {})
-    port = server_config.get("port", 5000)  # Default to 5000 if not specified
-    debug = server_config.get("debug", True)  # Default to True for development
-
-    # Check if we're running as a PyInstaller executable
-    if getattr(sys, "frozen", False):
-        # Running as PyInstaller executable - disable debug mode
-        debug = False
-
-    # Parse command line arguments for port (overrides config)
-    if len(sys.argv) > 1:
-        for i, arg in enumerate(sys.argv):
-            if arg == "--port" and i + 1 < len(sys.argv):
-                try:
-                    port = int(sys.argv[i + 1])
-                except ValueError:
-                    print(f"Invalid port number: {sys.argv[i + 1]}")
-                    sys.exit(1)
-
-    # Log server startup configuration
     if logger:
-        logger.info(f"Starting Flask server on port {port} (debug={debug})")
+        logger.info(
+            f"Starting Flask server on {host}:{port} (debug={debug}, url={url})"
+        )
 
-    # Run the application
-    app.run(debug=debug, port=port)
+    try:
+        app.run(host=host, port=port, debug=debug)
+    except OSError as e:
+        # Common when port is already taken
+        print(f"Failed to bind {host}:{port}: {e}")
+        print(
+            "Tip: pick a free port, e.g.  python app.py --port 5060\n"
+            "  or set server.port in config.json / CB_DASHBOARD_PORT"
+        )
+        if logger:
+            logger.error(f"Failed to bind {host}:{port}: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

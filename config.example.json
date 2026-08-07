@@ -20,7 +20,7 @@
         {
             "host": "http://production.example.com:8091",
             "user": "Administrator",
-            "pass": "secure_password",
+            "pass": "change-me",
             "customName": "Production Cluster",
             "watch": false
         }

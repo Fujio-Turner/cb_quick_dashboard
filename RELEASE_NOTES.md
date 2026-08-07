@@ -230,9 +230,26 @@ Use this file for future ships. Newest first.
 
 See `IMPROVEMENT_PLAN.md` phases A–F and optional training track.
 
-### 1.0.3 — (runtime string at catalog time)
+### 1.1.0 — Configurable listen host/port (2026-08-07)
 
-Patch-level runtime version present in `app.py` at catalog snapshot. Treat feature surface as **1.0.0 baseline** above unless a later note lists deltas.
+#### Added
+- `server.host` (default `127.0.0.1`) and default **`server.port` 5050** (avoids crowded 5000)
+- CLI: `--host`, `--port`, `--debug`, `--no-debug`
+- Env: `CB_DASHBOARD_HOST`, `CB_DASHBOARD_PORT`
+- Precedence: CLI → env → config.json → defaults
+- Startup prints `Open: http://host:port` and bind-failure tips
+- `config.example.json` template
+- `resolve_server_settings()` + tests (`tests/test_server_settings.py`)
+- `main()` entrypoint for console scripts
+
+#### Changed
+- Debug default is **false** when unset
+- Flask binds explicit `host` (localhost by default)
+- Version aligned to **1.1.0** (`app.py`, `setup.py`)
+
+### 1.0.3 — (runtime string at prior catalog time)
+
+Patch-level runtime version present in `app.py` at original catalog snapshot. Treat feature surface as **1.0.0 baseline** above unless a later note lists deltas.
 
 ### 1.0.0 — Baseline catalog
 

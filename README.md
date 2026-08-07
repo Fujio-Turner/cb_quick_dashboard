@@ -7,7 +7,7 @@ A Python web application that monitors multiple Couchbase clusters with real-tim
 ![Cluster Details](img/CouchBase_2.png)
 
 
-##### Version 1.0.x (see `RELEASE_NOTES.md`)
+##### Version 1.1.0 (see `RELEASE_NOTES.md`)
 
 **Planning / release docs:** [RELEASE_NOTES.md](RELEASE_NOTES.md) (1.0 baseline catalog) · [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) (phased hardening & port config roadmap)
 
@@ -78,11 +78,15 @@ cd cb_quick_dashboard
 pip install -r requirements.txt
 ```
 
-3. Configure your clusters in `config.json`:
+3. Configure your clusters in `config.json` (copy from the example if needed):
+```bash
+cp config.example.json config.json
+```
 ```json
 {
     "server": {
-        "port": 5000,
+        "host": "127.0.0.1",
+        "port": 5050,
         "debug": false
     },
     "logging": {
@@ -111,10 +115,21 @@ pip install -r requirements.txt
 
 4. Run the application:
 ```bash
+source venv/bin/activate   # if using the project venv
 python app.py
 ```
 
-5. Open http://localhost:5000 in your browser
+5. Open the URL printed at startup (default **http://127.0.0.1:5050**)
+
+Port **5000** is often already used by other local tools. Defaults are **127.0.0.1:5050**. Override any time:
+
+```bash
+python app.py --port 5060
+python app.py --host 127.0.0.1 --port 5080
+CB_DASHBOARD_PORT=5070 python app.py
+```
+
+Precedence: `--port` / `--host` → env `CB_DASHBOARD_PORT` / `CB_DASHBOARD_HOST` → `config.json` `server.*` → defaults.
 
 ## Configuration
 
@@ -123,8 +138,9 @@ python app.py
 The configuration file contains three main sections:
 
 #### Server Configuration
-- **`server.port`**: Port number for the Flask web server (default: 5000)
-- **`server.debug`**: Enable Flask debug mode for development (boolean, default: false)
+- **`server.host`**: Bind address (default: `127.0.0.1` — localhost only)
+- **`server.port`**: Port for the Flask web server (default: **5050**)
+- **`server.debug`**: Enable Flask debug mode (boolean, default: false)
 
 #### Logging Configuration  
 - **`logging.level`**: Log level for application messages (options: "debug", "info", "warning", "error")

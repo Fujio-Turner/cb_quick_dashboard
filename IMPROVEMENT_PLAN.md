@@ -536,10 +536,10 @@ Update `RELEASE_NOTES.md` on every ship (newest section first).
 
 ### Checkbox tracker (paste updates as you go)
 
-- [ ] A1.1 Schema/defaults  
-- [ ] A1.2 Bind + CLI + env  
-- [ ] A1.3 Docs port  
-- [ ] A1.4 Tests port  
+- [x] A1.1 Schema/defaults  
+- [x] A1.2 Bind + CLI + env  
+- [x] A1.3 Docs port  
+- [x] A1.4 Tests port  
 - [ ] A2.1 Example config + gitignore  
 - [ ] A2.2 Config path  
 - [ ] A2.3 pass_env optional  
@@ -551,6 +551,7 @@ Update `RELEASE_NOTES.md` on every ship (newest section first).
 - [ ] E1–E4  
 - [ ] F* optional  
 - [ ] Phase T training (external doc)
+- [ ] Chart history retention (30 min) — product ask; not yet scheduled in A–F table
 
 ---
 
